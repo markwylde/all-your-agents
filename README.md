@@ -26,6 +26,29 @@ npm install all-your-agents
 
 Node.js ≥ 20, macOS and Linux. Pass `{ fs, processes }` to observe a remote machine.
 
+## CLI
+
+`aya` is `top` for coding agents. It lists every live session, puts the ones waiting on you first, and updates as they change.
+
+```sh
+npx aya            # full-screen live view
+npx aya --once     # print a table and exit (also when piped)
+npx aya --json     # print live sessions as JSON and exit
+npx aya --all      # also show sessions that close while aya is open
+```
+
+| Key | Action |
+| --- | --- |
+| `↑` `↓` / `k` `j`, `Home` `End`, `PgUp` `PgDn` | Move the selection |
+| `Enter` | Details: full title and folder, what it is waiting for, current tool, last error, subagents |
+| `/` | Filter by title, folder, harness, model, or pid. `Esc` clears |
+| `s` `>` / `<`, `r` | Next / previous sort column, reverse |
+| `c` | Show or hide closed sessions |
+| `?` `h` | Help |
+| `q` `Ctrl+C` | Quit and restore the terminal |
+
+The screen redraws only when an agent changes, a key is pressed, or the terminal resizes. Times are clock times (`14:31:02`), not ticking durations, so nothing runs on a timer. `NO_COLOR` is honoured.
+
 ## Session object
 
 Live sessions have a `pid`. Historical ones do not. `kind` is `interactive` or `headless`.

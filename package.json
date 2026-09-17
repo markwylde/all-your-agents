@@ -16,6 +16,9 @@
       "import": "./dist/testing/index.js"
     }
   },
+  "bin": {
+    "aya": "dist/cli/aya.js"
+  },
   "files": [
     "dist",
     "docs"

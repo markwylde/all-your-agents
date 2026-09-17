@@ -27,6 +27,16 @@ if (typeof defineConformanceTests !== 'function') throw new Error('testing');
 		const { writeFileSync } = await import('node:fs');
 		writeFileSync(join(dir, 'check.mjs'), src);
 		execFileSync('node', [join(dir, 'check.mjs')], { cwd: dir, stdio: 'pipe' });
+		const bin = join(dir, 'node_modules', '.bin', 'aya');
+		const version = execFileSync(bin, ['--version'], { cwd: dir, encoding: 'utf8' });
+		assert.match(version, /^\d+\.\d+\.\d+/);
+		const home = join(dir, 'claude-home');
+		const json = execFileSync(bin, ['--json'], {
+			cwd: dir,
+			encoding: 'utf8',
+			env: { ...process.env, CLAUDE_CONFIG_DIR: home },
+		});
+		assert.deepEqual(JSON.parse(json), []);
 		assert.ok(true);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
