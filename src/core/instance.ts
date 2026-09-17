@@ -548,7 +548,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 				}
 			}
 			live.clear();
-			createdProcesses?.close();
+			await createdProcesses?.close();
 			startPromise = undefined;
 			catchingUp = false;
 		},

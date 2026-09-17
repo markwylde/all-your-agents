@@ -25,36 +25,72 @@ export function koffiAvailable(): boolean {
 	}
 }
 
-export function createLocalProcesses(opts: ProcessesOptions = {}): Processes & { close(): void } {
-	const enabled = opts.koffi ?? koffiAvailable();
-	const watchers = new Map<number, WatchState>();
-	let worker: Worker | undefined;
+type WorkerHandle = {
+	worker: Worker;
+	exited: Promise<void>;
+};
 
-	if (enabled) {
+/**
+ * The process-watch worker exists only while at least one pid is watched, and it
+ * is never unref'd. koffi aborts the whole process if Node tears a worker down
+ * while it is loading or has a native call in flight, so the worker must always
+ * stop itself: we post `stop`, it wakes its wait via its pipe, closes its port,
+ * and exits. `close()` resolves only once that exit has happened.
+ */
+export function createLocalProcesses(
+	opts: ProcessesOptions = {},
+): Processes & { close(): Promise<void> } {
+	let enabled = opts.koffi ?? koffiAvailable();
+	const watchers = new Map<number, WatchState>();
+	const stopping = new Set<Promise<void>>();
+	let current: WorkerHandle | undefined;
+
+	const spawn = (): WorkerHandle | undefined => {
+		let worker: Worker;
 		try {
 			worker = new Worker(new URL('./process-watch-worker.js', import.meta.url));
-			worker.unref();
-			worker.on('message', (msg: { type: string; pid?: number }) => {
-				if (msg.type !== 'exit' || msg.pid == null) return;
-				const state = watchers.get(msg.pid);
-				if (!state) return;
-				watchers.delete(msg.pid);
-				if (watchers.size === 0) worker?.unref();
-				for (const cb of state.callbacks) cb();
-			});
-			worker.on('error', () => {
-				try {
-					worker?.unref();
-					void worker?.terminate();
-				} catch {
-					// ignore
-				}
-				worker = undefined;
-			});
 		} catch {
-			worker = undefined;
+			return undefined;
 		}
-	}
+		const handle: WorkerHandle = {
+			worker,
+			exited: new Promise<void>((resolve) => {
+				worker.once('exit', () => resolve());
+			}),
+		};
+		worker.on('message', (msg: { type: string; pid?: number }) => {
+			if (msg.type === 'unsupported') {
+				enabled = false;
+				return;
+			}
+			if (msg.type !== 'exit' || msg.pid == null || current !== handle) return;
+			const state = watchers.get(msg.pid);
+			if (!state) return;
+			watchers.delete(msg.pid);
+			for (const cb of state.callbacks) cb();
+			if (watchers.size === 0 && current === handle) retire();
+		});
+		worker.on('error', () => {
+			if (current === handle) current = undefined;
+		});
+		void handle.exited.then(() => {
+			if (current === handle) current = undefined;
+		});
+		return handle;
+	};
+
+	const retire = (): void => {
+		const handle = current;
+		current = undefined;
+		if (!handle) return;
+		try {
+			handle.worker.postMessage({ type: 'stop' });
+		} catch {
+			// already exited
+		}
+		stopping.add(handle.exited);
+		void handle.exited.then(() => stopping.delete(handle.exited));
+	};
 
 	return {
 		async info(pid) {
@@ -63,39 +99,34 @@ export function createLocalProcesses(opts: ProcessesOptions = {}): Processes & {
 			return { alive: false };
 		},
 		watch(pid, onExit): ProcessWatchResult {
-			if (!enabled || !worker) return 'unsupported';
+			if (!enabled) return 'unsupported';
+			current ??= spawn();
+			const handle = current;
+			if (!handle) return 'unsupported';
 			let state = watchers.get(pid);
 			if (!state) {
 				state = { callbacks: new Set() };
 				watchers.set(pid, state);
-				worker.ref();
-				worker.postMessage({ type: 'watch', pid });
+				handle.worker.postMessage({ type: 'watch', pid });
 			}
 			state.callbacks.add(onExit);
 			return {
 				stop() {
-					const current = watchers.get(pid);
-					if (!current) return;
-					current.callbacks.delete(onExit);
-					if (current.callbacks.size === 0) {
-						watchers.delete(pid);
-						if (watchers.size === 0) worker?.unref();
-						worker?.postMessage({ type: 'unwatch', pid });
-					}
+					const entry = watchers.get(pid);
+					if (!entry) return;
+					entry.callbacks.delete(onExit);
+					if (entry.callbacks.size > 0) return;
+					watchers.delete(pid);
+					if (current !== handle) return;
+					if (watchers.size === 0) retire();
+					else handle.worker.postMessage({ type: 'unwatch', pid });
 				},
 			};
 		},
-		close() {
-			const current = worker;
-			worker = undefined;
+		async close() {
 			watchers.clear();
-			if (!current) return;
-			try {
-				current.postMessage({ type: 'stop' });
-			} catch {
-				// already dead
-			}
-			current.unref();
+			retire();
+			await Promise.all([...stopping]);
 		},
 	};
 }

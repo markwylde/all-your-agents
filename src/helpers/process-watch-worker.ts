@@ -25,14 +25,19 @@ async function main(): Promise<void> {
 		koffi = (await import('koffi')).default;
 	} catch {
 		port.postMessage({ type: 'unsupported' });
+		port.close();
 		return;
 	}
 	try {
 		if (platform() === 'darwin') runDarwin(koffi);
 		else if (platform() === 'linux') runLinux(koffi);
-		else port.postMessage({ type: 'unsupported' });
+		else {
+			port.postMessage({ type: 'unsupported' });
+			port.close();
+		}
 	} catch (err) {
 		port.postMessage({ type: 'unsupported', error: String(err) });
+		port.close();
 	}
 }
 
@@ -97,6 +102,7 @@ function runDarwin(koffi: typeof import('koffi')): void {
 
 	const pending = new Map<number, 'add' | 'remove'>();
 	let running = true;
+	let open = true;
 	const zeroTimeout = Buffer.alloc(16);
 
 	const apply = (): void => {
@@ -121,7 +127,7 @@ function runDarwin(koffi: typeof import('koffi')): void {
 		if (msg.type === 'watch' && msg.pid != null) pending.set(msg.pid, 'add');
 		else if (msg.type === 'unwatch' && msg.pid != null) pending.set(msg.pid, 'remove');
 		else if (msg.type === 'stop') running = false;
-		writeFn(wfd, Buffer.from([1]), 1);
+		if (open) writeFn(wfd, Buffer.from([1]), 1);
 	});
 
 	port.postMessage({ type: 'ready' });
@@ -138,6 +144,8 @@ function runDarwin(koffi: typeof import('koffi')): void {
 	) => void;
 
 	const shutdown = (): void => {
+		if (!open) return;
+		open = false;
 		closeFn(rfd);
 		closeFn(wfd);
 		closeFn(kq);
@@ -159,6 +167,7 @@ function runDarwin(koffi: typeof import('koffi')): void {
 			}
 			if (err || n < 0) {
 				port.postMessage({ type: 'unsupported' });
+				shutdown();
 				return;
 			}
 			for (let i = 0; i < n; i++) {
@@ -216,6 +225,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 	const pidfds = new Map<number, number>();
 	const pending = new Map<number, 'add' | 'remove'>();
 	let running = true;
+	let open = true;
 
 	const apply = (): void => {
 		for (const [pid, op] of pending) {
@@ -243,7 +253,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 		if (msg.type === 'watch' && msg.pid != null) pending.set(msg.pid, 'add');
 		else if (msg.type === 'unwatch' && msg.pid != null) pending.set(msg.pid, 'remove');
 		else if (msg.type === 'stop') running = false;
-		writeFn(wfd, Buffer.from([1]), 1);
+		if (open) writeFn(wfd, Buffer.from([1]), 1);
 	});
 
 	port.postMessage({ type: 'ready' });
@@ -258,6 +268,8 @@ function runLinux(koffi: typeof import('koffi')): void {
 	) => void;
 
 	const shutdown = (): void => {
+		if (!open) return;
+		open = false;
 		for (const fd of pidfds.values()) closeFn(fd);
 		closeFn(rfd);
 		closeFn(wfd);
@@ -280,6 +292,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 			}
 			if (err || n < 0) {
 				port.postMessage({ type: 'unsupported' });
+				shutdown();
 				return;
 			}
 			const lookup = new Map<number, number>();

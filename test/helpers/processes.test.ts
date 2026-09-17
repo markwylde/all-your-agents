@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { installTimerGuard } from '../../src/helpers/no-timers.js';
 import { createLocalProcesses } from '../../src/helpers/processes.js';
@@ -70,15 +70,42 @@ test('detached sleep not spawned as a child triggers onExit', async (t) => {
 	live.close();
 });
 
-test('stop() ends the worker and no timer is armed', () => {
+test('stop() ends the worker and no timer is armed', async () => {
 	const guard = installTimerGuard();
 	try {
 		const procs = createLocalProcesses();
 		const handle = procs.watch(process.pid, () => {});
 		if (handle !== 'unsupported') handle.stop();
-		procs.close();
+		await procs.close();
 		guard.assertIdle();
 	} finally {
 		guard.restore();
+	}
+});
+
+test('close() waits for the worker so the process can exit without aborting', async (t) => {
+	const probe = createLocalProcesses();
+	const probeHandle = probe.watch(process.pid, () => {});
+	await probe.close();
+	if (probeHandle === 'unsupported') {
+		t.skip('koffi watch unsupported');
+		return;
+	}
+	const helpers = new URL('../../src/helpers/processes.js', import.meta.url).href;
+	// Close at different points in the worker's life: while koffi is still loading, and
+	// while a native wait is in flight. Exiting afterwards must never abort the process.
+	for (const delay of [0, 0, 5, 50, 200]) {
+		const script = `
+			import { createLocalProcesses } from ${JSON.stringify(helpers)};
+			const procs = createLocalProcesses();
+			procs.watch(process.pid, () => {});
+			await new Promise((r) => setTimeout(r, ${delay}));
+			await procs.close();
+		`;
+		const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+			encoding: 'utf8',
+			timeout: 10_000,
+		});
+		assert.equal(result.status, 0, `delay ${delay}: ${result.stderr.slice(0, 300)}`);
 	}
 });
