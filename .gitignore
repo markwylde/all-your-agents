@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-test/
+*.tgz
+.DS_Store
+.worktrees/
+coverage/

@@ -1,0 +1,7 @@
+{
+	"agentType": "Explore",
+	"description": "bg",
+	"toolUseId": "toolu_bg",
+	"spawnDepth": 1,
+	"requestShape": "background"
+}

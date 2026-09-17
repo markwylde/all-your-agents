@@ -1,0 +1,16 @@
+[
+	"user",
+	"assistant",
+	"turn-end",
+	"title",
+	"title",
+	"user",
+	"tool",
+	"subagent",
+	"tool-result",
+	"turn-end",
+	"tool",
+	"subagent",
+	"tool-result",
+	"error"
+]
