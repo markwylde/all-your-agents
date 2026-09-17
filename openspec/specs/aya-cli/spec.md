@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The `aya` command: a `top`/`htop`-style terminal monitor that shows the live status of every coding-agent session on the machine, built on the public all-your-agents API.
+The `all-your-agents` command: a `top`/`htop`-style terminal monitor that shows the live status of every coding-agent session on the machine, built on the public all-your-agents API.
 
 ## Requirements
 

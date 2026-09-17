@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -27,7 +27,8 @@ if (typeof defineConformanceTests !== 'function') throw new Error('testing');
 		const { writeFileSync } = await import('node:fs');
 		writeFileSync(join(dir, 'check.mjs'), src);
 		execFileSync('node', [join(dir, 'check.mjs')], { cwd: dir, stdio: 'pipe' });
-		const bin = join(dir, 'node_modules', '.bin', 'aya');
+		const bin = join(dir, 'node_modules', '.bin', 'all-your-agents');
+		assert.equal(existsSync(join(dir, 'node_modules', '.bin', 'aya')), false);
 		const version = execFileSync(bin, ['--version'], { cwd: dir, encoding: 'utf8' });
 		assert.match(version, /^\d+\.\d+\.\d+/);
 		const home = join(dir, 'claude-home');

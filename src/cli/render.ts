@@ -1,4 +1,5 @@
 import { fit, type Style, sanitize, style, truncate, width } from './ansi.ts';
+import { COMMAND } from './args.ts';
 import { clockTime, folder, longTime, shortTime, statusText, subCount, value } from './format.ts';
 import { liveCounts, visibleRows } from './rows.ts';
 import { bodyHeight, type Row, type SortKey, type ViewState } from './state.ts';
@@ -128,7 +129,7 @@ function clip(line: string, cols: number): string {
 
 function headerLine(state: ViewState, opts: RenderOptions): string {
 	const c = opts.color;
-	const left: string[] = [style(' aya', ['bold'], c)];
+	const left: string[] = [style(` ${COMMAND}`, ['bold'], c)];
 	if (!state.ready) {
 		left.push(style('loading sessions…', ['dim'], c));
 	} else {

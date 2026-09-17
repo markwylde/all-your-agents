@@ -96,7 +96,7 @@ test('--version and --help print and exit 0; unknown flag exits 2', async () => 
 	assert.equal(v.stdout.text, '9.9.9\n');
 	const h = setup({ argv: ['--help'] });
 	assert.equal(await h.start(), 0);
-	assert.match(h.stdout.text, /Usage: aya/);
+	assert.match(h.stdout.text, /Usage: all-your-agents/);
 	const bad = setup({ argv: ['--bogus'] });
 	assert.equal(await bad.start(), 2);
 	assert.match(bad.stderr.text, /unknown option '--bogus'/);

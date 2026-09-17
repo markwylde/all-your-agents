@@ -9,14 +9,17 @@ export type CliArgs = {
 
 export type ParseResult = { ok: true; args: CliArgs } | { ok: false; error: string };
 
-export const USAGE = `Usage: aya [options]
+/** The executable name. It is the package name, so that `npx` resolves it. */
+export const COMMAND = 'all-your-agents';
+
+export const USAGE = `Usage: ${COMMAND} [options]
 
 Watch every coding agent on this machine, like top.
 
 Options:
   --once       Print a table of live sessions and exit
   --json       Print live sessions as JSON and exit
-  --all        Show sessions that close while aya is open
+  --all        Show sessions that close while it is open
   --help       Show this help
   --version    Print the version
 
@@ -32,7 +35,7 @@ Keys:
   ? h              Help
   q Ctrl+C         Quit
 
-When stdout is not a terminal, aya behaves as if --once was given.
+When stdout is not a terminal, ${COMMAND} behaves as if --once was given.
 `;
 
 export function parseArgs(argv: readonly string[]): ParseResult {
@@ -57,7 +60,7 @@ export function parseArgs(argv: readonly string[]): ParseResult {
 				args.version = true;
 				break;
 			default:
-				return { ok: false, error: `aya: unknown option '${arg}'` };
+				return { ok: false, error: `${COMMAND}: unknown option '${arg}'` };
 		}
 	}
 	return { ok: true, args };

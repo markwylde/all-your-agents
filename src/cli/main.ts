@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 import { AllYourAgents } from '../index.ts';
+import { COMMAND } from './args.ts';
 import { run } from './run.ts';
 
 function readVersion(): string {
@@ -28,7 +29,7 @@ run({
 		process.exitCode = code;
 	},
 	(error: unknown) => {
-		process.stderr.write(`aya: ${error instanceof Error ? error.message : String(error)}\n`);
+		process.stderr.write(`${COMMAND}: ${error instanceof Error ? error.message : String(error)}\n`);
 		process.exit(1);
 	},
 );

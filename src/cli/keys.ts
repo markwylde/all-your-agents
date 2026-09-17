@@ -20,7 +20,7 @@ const NAMED: Record<string, Key> = {
 	backspace: 'backspace',
 };
 
-/** Map a `readline` keypress to a view key, or undefined for keys aya ignores. */
+/** Map a `readline` keypress to a view key, or undefined for keys the view ignores. */
 export function toKey(str: string | undefined, key: ReadlineKey | undefined): Key | undefined {
 	if (key?.ctrl && key.name === 'c') return 'ctrl-c';
 	// Node reports a lone Esc as `{ name: 'escape', meta: true }`, so named keys are

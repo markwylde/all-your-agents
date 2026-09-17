@@ -38,13 +38,13 @@ node ./demo/watch.ts         # stream session events as they happen (Ctrl+C to s
 
 ## CLI
 
-`aya` is `top` for coding agents. It lists every live session, puts the ones waiting on you first, and updates as they change.
+`all-your-agents` is `top` for coding agents. It lists every live session, puts the ones waiting on you first, and updates as they change.
 
 ```sh
-npx aya            # full-screen live view
-npx aya --once     # print a table and exit (also when piped)
-npx aya --json     # print live sessions as JSON and exit
-npx aya --all      # also show sessions that close while aya is open
+npx all-your-agents            # full-screen live view
+npx all-your-agents --once     # print a table and exit (also when piped)
+npx all-your-agents --json     # print live sessions as JSON and exit
+npx all-your-agents --all      # also show sessions that close while it is open
 ```
 
 | Key | Action |

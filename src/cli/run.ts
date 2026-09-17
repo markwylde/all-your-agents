@@ -1,7 +1,7 @@
 import { emitKeypressEvents } from 'node:readline';
 import type { AllYourAgentsInstance, Session, Subagent } from '../index.ts';
 import { CLEAR_LINE_END, CLEAR_SCREEN_END, ENTER_SCREEN, HOME, LEAVE_SCREEN } from './ansi.ts';
-import { parseArgs, USAGE } from './args.ts';
+import { COMMAND, parseArgs, USAGE } from './args.ts';
 import { type ReadlineKey, toKey } from './keys.ts';
 import { renderLines } from './render.ts';
 import { applyEvent, applyKey, initialState, type ViewEvent, type ViewState } from './state.ts';
@@ -73,7 +73,7 @@ export async function run(opts: RunOptions): Promise<number> {
 
 	if (args.mode !== 'tui' || !opts.stdout.isTTY) {
 		const aya = opts.createInstance();
-		aya.on('error', (e) => opts.stderr.write(`aya: ${e.provider}: ${message(e.error)}\n`));
+		aya.on('error', (e) => opts.stderr.write(`${COMMAND}: ${e.provider}: ${message(e.error)}\n`));
 		try {
 			await aya.start();
 			const live = aya.running();
@@ -128,7 +128,7 @@ function interactive(
 		restore();
 		if (error !== undefined) {
 			stderr.write(
-				`aya: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+				`${COMMAND}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
 			);
 		}
 		try {
