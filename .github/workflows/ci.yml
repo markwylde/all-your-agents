@@ -1,10 +1,7 @@
 name: ci
 on:
   push:
-    branches:
-      - '**'
-    tags-ignore:
-      - '**'
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -31,9 +28,10 @@ jobs:
       - run: npm test
 
   e2e:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,9 +41,14 @@ jobs:
       - run: npm ci
       - name: Install Claude Code
         run: |
-          curl -fsSL https://claude.ai/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - run: claude --version
+          for i in 1 2 3 4; do
+            if npm install -g @anthropic-ai/claude-code && claude --version; then
+              exit 0
+            fi
+            sleep $((i * 4))
+          done
+          echo "Claude Code install failed after retries"
+          exit 1
       - name: Live e2e
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

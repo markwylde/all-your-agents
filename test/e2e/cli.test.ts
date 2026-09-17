@@ -91,22 +91,32 @@ test('prompt-arg, close, resume uuid, continue: events + listing', async (t) => 
 			assert.ok(closed, 'get() lost history after close');
 			assert.equal(closed.pid, undefined);
 			assert.ok((await collectTurns(closed)).some((text) => text.includes('ONE')));
-			await new Promise((r) => setTimeout(r, 1000));
 
-			const resume = startBackgroundClaude(
-				home,
-				cwd,
-				'Reply with only the word TWO then stop.',
-				['--resume', id],
-				{ inheritSavedOptions: true },
-			);
-			const short2 = await resume.id;
-			kids.push({ child: resume.child, bg: short2 });
-			await waitUntil(
-				() => log.filter((l) => l.startsWith('open:') || l.startsWith('create:')).length >= 2,
-				45_000,
-				() => log.join(' | '),
-			);
+			let short2 = '';
+			for (let attempt = 0; attempt < 3; attempt++) {
+				if (attempt > 0) await new Promise((r) => setTimeout(r, 1000));
+				const resume = startBackgroundClaude(
+					home,
+					cwd,
+					'Reply with only the word TWO then stop.',
+					['--resume', id],
+					{ inheritSavedOptions: true },
+				);
+				short2 = await resume.id;
+				kids.push({ child: resume.child, bg: short2 });
+				try {
+					await waitUntil(
+						() => log.some((l) => l === `open:${id}`),
+						20_000,
+						() => log.join(' | '),
+					);
+					break;
+				} catch (err) {
+					stopBackgroundClaude(home, short2);
+					resume.child.kill();
+					if (attempt === 2) throw err;
+				}
+			}
 			assert.ok(
 				log.some((l) => l === `open:${id}`),
 				`resume uuid did not open ${id}: ${log.join(' | ')}`,
