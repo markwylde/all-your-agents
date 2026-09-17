@@ -1,5 +1,8 @@
 # all-your-agents
 
+[![CI](https://github.com/markwylde/all-your-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/markwylde/all-your-agents/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/all-your-agents)](https://www.npmjs.com/package/all-your-agents)
+
 Watch every coding agent on this machine, and inspect the sessions they leave behind.
 
 ```ts
