@@ -46,5 +46,13 @@
   },
   "optionalDependencies": {
     "koffi": "^2.14.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/markwylde/all-your-agents.git"
+  },
+  "homepage": "https://github.com/markwylde/all-your-agents#readme",
+  "bugs": {
+    "url": "https://github.com/markwylde/all-your-agents/issues"
   }
 }
