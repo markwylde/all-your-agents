@@ -41,7 +41,9 @@ aya.on('subagent:end', (sub, s, meta) =>
 	log('subagent:end', `${who(s)}  ${sub.type} ${sub.status}`, meta),
 );
 aya.on('ready', () => log('ready', `${aya.running().length} live, watching for changes…`));
-aya.on('error', (e) => log('error', `${e.provider}: ${String(e.error)}`));
+aya.on('error', (e) =>
+	log('error', `${e.source === 'provider' ? e.provider : e.event}: ${String(e.error)}`),
+);
 
 process.once('SIGINT', async () => {
 	await aya.stop();

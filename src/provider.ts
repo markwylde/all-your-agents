@@ -72,10 +72,25 @@ export type WatchFileFn = (
 	onChange: (event: FileChange) => void,
 ) => { close(): void };
 
-export type TailJsonlFn = (path: string) => AsyncIterable<unknown> & { close(): void };
+export type TailJsonlFn = (
+	path: string,
+	opts?: { backlog?: 'separate' },
+) => AsyncIterable<unknown> & {
+	close(): void;
+	/**
+	 * With `backlog: 'separate'`, the complete records in the file when the tail opened.
+	 * Iteration then yields only later appends. Otherwise resolves to an empty array.
+	 */
+	backlog: Promise<unknown[]>;
+};
 
 export type WatchContext = {
 	emit: ProviderEmit;
+	/**
+	 * Report a failure that happened after `watch()` returned. It becomes an `error`
+	 * event naming this provider. Keep observing afterwards.
+	 */
+	reportError: (error: unknown) => void;
 	home?: string;
 	fs: Fs;
 	processes: Processes;

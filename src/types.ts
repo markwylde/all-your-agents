@@ -134,8 +134,10 @@ export type SubagentFacts = {
 	endedAt?: number;
 };
 
-export type ProviderError = {
-	provider: string;
-	error: unknown;
-	path?: string;
-};
+/**
+ * Payload of the `error` event. A provider failed, or a listener threw while handling
+ * `event`. Neither is ever thrown into the caller.
+ */
+export type AgentsError =
+	| { source: 'provider'; provider: string; error: unknown }
+	| { source: 'listener'; event: string; error: unknown };

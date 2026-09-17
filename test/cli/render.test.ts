@@ -101,7 +101,7 @@ test('render shows filter counts, closed rows, sort direction, and errors', () =
 	assert.ok(lines.some((l) => /^\s+closed/.test(l)));
 	assert.match(lines[0] ?? '', /2 live/);
 
-	state = applyEvent(state, { type: 'error', provider: 'claude-code', message: 'boom\x1b[2J' });
+	state = applyEvent(state, { type: 'error', origin: 'claude-code', message: 'boom\x1b[2J' });
 	lines = renderLines(state, opts);
 	assert.equal(lines.at(-1), ' error [claude-code] boom [2J');
 });

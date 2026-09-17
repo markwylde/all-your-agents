@@ -61,9 +61,9 @@ test('ready keeps sessions closed earlier and drops rows that are not live', () 
 
 test('last provider error is kept and dismissed by a key', () => {
 	let state = withSessions([session('a')]);
-	state = applyEvent(state, { type: 'error', provider: 'p1', message: 'one' });
-	state = applyEvent(state, { type: 'error', provider: 'p2', message: 'two' });
-	assert.deepEqual(state.lastError, { provider: 'p2', message: 'two' });
+	state = applyEvent(state, { type: 'error', origin: 'p1', message: 'one' });
+	state = applyEvent(state, { type: 'error', origin: 'p2', message: 'two' });
+	assert.deepEqual(state.lastError, { origin: 'p2', message: 'two' });
 	state = press(state, 'x');
 	assert.equal(state.lastError, undefined);
 });

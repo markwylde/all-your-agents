@@ -306,7 +306,7 @@ function footerLine(state: ViewState, opts: RenderOptions): string {
 	if (state.prompt != null) return `/${sanitize(state.prompt)}${c ? '█' : '_'}`;
 	if (state.lastError) {
 		return style(
-			` error [${sanitize(state.lastError.provider)}] ${sanitize(state.lastError.message)}`,
+			` error [${sanitize(state.lastError.origin)}] ${sanitize(state.lastError.message)}`,
 			['red'],
 			c,
 		);

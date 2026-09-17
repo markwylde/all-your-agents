@@ -16,8 +16,8 @@ import type {
 	WatchContext,
 } from '../provider.ts';
 import type {
+	AgentsError,
 	EventMeta,
-	ProviderError,
 	Session,
 	SessionActivity,
 	SessionEvent,
@@ -36,6 +36,9 @@ import { activityChanged, emptyActivity, reduceActivity, withOpenSubagents } fro
 import { groupTurns } from './turns.ts';
 
 const TITLE_ORDER: TitleSource[] = ['user', 'harness', 'process', 'prompt'];
+
+/** Closed sessions kept in memory. Older ones are still returned when their provider lists them. */
+const MAX_CLOSED = 1000;
 
 type Listener = (...args: never[]) => void;
 
@@ -79,7 +82,7 @@ export type AllYourAgents = {
 		listener: (subagent: Subagent, session: Session, meta: EventMeta) => void,
 	): AllYourAgents;
 	on(event: 'ready', listener: () => void): AllYourAgents;
-	on(event: 'error', listener: (error: ProviderError) => void): AllYourAgents;
+	on(event: 'error', listener: (error: AgentsError) => void): AllYourAgents;
 	off(event: string, listener: (...args: never[]) => void): AllYourAgents;
 	start(): Promise<void>;
 	stop(): Promise<void>;
@@ -110,11 +113,35 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 	let catchingUp = false;
 	let closed = false;
 
+	/**
+	 * A listener that throws must not unwind into the provider whose fact caused the
+	 * event. The failure goes to `error`; with nobody listening there, or when an
+	 * `error` listener is what threw, it is rethrown from a microtask so it still
+	 * surfaces, as an uncaught exception.
+	 */
+	const listenerFailed = (event: string, error: unknown): void => {
+		if (event === 'error' || !listeners.get('error')?.size) {
+			queueMicrotask(() => {
+				throw error;
+			});
+			return;
+		}
+		emit('error', { source: 'listener', event, error } satisfies AgentsError);
+	};
+
 	const emit = (event: string, ...args: unknown[]): void => {
 		if (closed && event !== 'error') return;
 		for (const fn of [...(listeners.get(event) ?? [])]) {
-			(fn as (...a: unknown[]) => void)(...args);
+			try {
+				(fn as (...a: unknown[]) => void)(...args);
+			} catch (error) {
+				listenerFailed(event, error);
+			}
 		}
+	};
+
+	const providerFailed = (provider: Provider, error: unknown): void => {
+		emit('error', { source: 'provider', provider: provider.id, error } satisfies AgentsError);
 	};
 
 	const meta = (): EventMeta => ({ catchUp: catchingUp });
@@ -131,9 +158,9 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			harness: entry.harness,
 			provider: entry.provider,
 			activity,
-			transcript: () => transcriptFor(entry.id),
-			events: () => eventsFor(entry.id),
-			subagents: () => subagentsFor(entry.id),
+			transcript: () => transcriptFor(entry.provider, entry.id),
+			events: () => eventsFor(entry.provider, entry.id),
+			subagents: () => subagentsFor(entry.provider, entry.id),
 		};
 		if (entry.pid != null) session.pid = entry.pid;
 		if (entry.cwd != null) session.cwd = entry.cwd;
@@ -148,10 +175,10 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		return session;
 	};
 
-	const attachSub = (rec: SubRecord): Subagent => ({
+	const attachSub = (rec: SubRecord, providerId: string): Subagent => ({
 		...rec,
-		transcript: () => transcriptFor(rec.sessionId, rec.id),
-		events: () => eventsFor(rec.sessionId, rec.id),
+		transcript: () => transcriptFor(providerId, rec.sessionId, rec.id),
+		events: () => eventsFor(providerId, rec.sessionId, rec.id),
 	});
 
 	const countOpen = (sessionId: string): number => {
@@ -233,6 +260,11 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		emit('session:status', attachSession(entry), meta());
 	};
 
+	const forget = (id: string): void => {
+		titles.delete(id);
+		subagents.delete(id);
+	};
+
 	const closeSession = (id: string): void => {
 		const entry = live.get(id);
 		if (!entry) return;
@@ -242,7 +274,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 				if (rec.status !== 'running') continue;
 				rec.status = 'cancelled';
 				rec.endedAt = clock.now();
-				emit('subagent:end', attachSub(rec), attachSession(entry), meta());
+				emit('subagent:end', attachSub(rec, entry.provider), attachSession(entry), meta());
 			}
 		}
 		bumpOpen(entry);
@@ -251,6 +283,11 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		delete entry.waitingFor;
 		live.delete(id);
 		history.set(id, entry);
+		for (const oldest of history.keys()) {
+			if (history.size <= MAX_CLOSED) break;
+			history.delete(oldest);
+			forget(oldest);
+		}
 		emit('session:close', attachSession(entry), meta());
 	};
 
@@ -382,7 +419,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			if (p.endedAt != null) rec.endedAt = p.endedAt;
 			bag.set(p.id, rec);
 			if (rec.status === 'running') {
-				emit('subagent:start', attachSub(rec), attachSession(entry), meta());
+				emit('subagent:start', attachSub(rec, entry.provider), attachSession(entry), meta());
 				bumpOpen(entry);
 			}
 			return;
@@ -400,7 +437,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			if (!entry || !rec || rec.status !== 'running') return;
 			rec.status = p.status;
 			rec.endedAt = p.endedAt ?? clock.now();
-			emit('subagent:end', attachSub(rec), attachSession(entry), meta());
+			emit('subagent:end', attachSub(rec, entry.provider), attachSession(entry), meta());
 			bumpOpen(entry);
 			return;
 		}
@@ -427,14 +464,15 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		}
 	}) as ProviderEmit;
 
-	const makeWatchCtx = (): WatchContext => ({
+	const makeWatchCtx = (provider: Provider): WatchContext => ({
 		emit: providerEmit,
+		reportError: (error) => providerFailed(provider, error),
 		fs,
 		processes: processes as Processes,
 		debounce: { quietMs, maxLatencyMs },
 		watchDir: (path, onChange) => watchDir(fs, path, onChange, { quietMs, maxLatencyMs, clock }),
 		watchFile: (path, onChange) => watchFile(fs, path, onChange, { quietMs, maxLatencyMs, clock }),
-		tailJsonl: (path) => tailJsonl(fs, path, { quietMs, maxLatencyMs, clock }),
+		tailJsonl: (path, opts) => tailJsonl(fs, path, { ...opts, quietMs, maxLatencyMs, clock }),
 		processInfo: (pid) => (processes as Processes).info(pid),
 		watchProcess: (pid, onExit) => (processes as Processes).watch(pid, onExit),
 	});
@@ -451,60 +489,80 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		subagentId,
 	});
 
-	async function* transcriptFor(id: string, subagentId?: string): AsyncIterable<Turn> {
-		const events = await collectEvents(id, subagentId, false);
+	const providerOf = (providerId: string): Provider | undefined =>
+		providers.find((p) => p.id === providerId);
+
+	async function* transcriptFor(
+		providerId: string,
+		id: string,
+		subagentId?: string,
+	): AsyncIterable<Turn> {
+		const events: SessionEvent[] = [];
+		for await (const event of iterateEvents(providerId, id, subagentId, false)) events.push(event);
 		for (const turn of groupTurns(events)) yield turn;
 	}
 
-	async function* eventsFor(id: string, subagentId?: string): AsyncIterable<SessionEvent> {
-		for await (const event of iterateEvents(id, subagentId, true)) yield event;
-	}
-
-	async function collectEvents(
+	function eventsFor(
+		providerId: string,
 		id: string,
-		subagentId: string | undefined,
-		follow: boolean,
-	): Promise<SessionEvent[]> {
-		const out: SessionEvent[] = [];
-		for await (const event of iterateEvents(id, subagentId, follow)) out.push(event);
-		return out;
+		subagentId?: string,
+	): AsyncIterable<SessionEvent> {
+		return iterateEvents(providerId, id, subagentId, true);
 	}
 
 	async function* iterateEvents(
+		providerId: string,
 		id: string,
 		subagentId: string | undefined,
 		follow: boolean,
 	): AsyncIterable<SessionEvent> {
-		const entry = live.get(id) ?? history.get(id);
-		const provider = providers.find((p) => p.id === entry?.provider) ?? providers[0];
+		const provider = providerOf(providerId);
 		if (!provider?.inspect) return;
-		for await (const event of provider.inspect(makeInspectCtx(follow, subagentId), id)) {
-			yield event;
-		}
+		yield* provider.inspect(makeInspectCtx(follow, subagentId), id);
 	}
 
-	async function subagentsFor(id: string): Promise<Subagent[]> {
+	async function subagentsFor(providerId: string, id: string): Promise<Subagent[]> {
 		const bag = subagents.get(id);
-		if (bag && bag.size > 0) return [...bag.values()].map(attachSub);
-		const entry = live.get(id) ?? history.get(id);
-		const provider = providers.find((p) => p.id === entry?.provider) ?? providers[0];
+		if (bag && bag.size > 0) return [...bag.values()].map((rec) => attachSub(rec, providerId));
+		const provider = providerOf(providerId);
 		if (!provider?.subagents) return [];
 		const facts = await provider.subagents(makeInspectCtx(false), id);
-		return facts.map((f) =>
-			attachSub({
+		return facts.map((f) => {
+			const rec: SubRecord = {
 				id: f.id,
 				sessionId: f.sessionId,
-				parentId: f.parentId,
 				harness: f.harness,
 				type: f.type,
-				title: f.title,
 				background: f.background,
 				status: f.status ?? 'completed',
-				startedAt: f.startedAt,
-				endedAt: f.endedAt,
-			}),
-		);
+			};
+			if (f.parentId) rec.parentId = f.parentId;
+			if (f.title) rec.title = f.title;
+			if (f.startedAt != null) rec.startedAt = f.startedAt;
+			if (f.endedAt != null) rec.endedAt = f.endedAt;
+			return attachSub(rec, providerId);
+		});
 	}
+
+	const snapshotToSession = (snap: SessionSnapshot, provider: Provider): Session => {
+		const providerId = snap.provider ?? provider.id;
+		const session: Session = {
+			id: snap.id,
+			harness: snap.harness,
+			provider: providerId,
+			activity: emptyActivity(),
+			transcript: () => transcriptFor(providerId, snap.id),
+			events: () => eventsFor(providerId, snap.id),
+			subagents: () => subagentsFor(providerId, snap.id),
+		};
+		if (snap.cwd) session.cwd = snap.cwd;
+		if (snap.title) session.title = snap.title;
+		if (snap.startedAt != null) session.startedAt = snap.startedAt;
+		if (snap.updatedAt != null) session.updatedAt = snap.updatedAt;
+		if (snap.kind) session.kind = snap.kind;
+		if (snap.model) session.model = snap.model;
+		return session;
+	};
 
 	function matches(session: Session, filter?: SessionFilter): boolean {
 		if (!filter) return true;
@@ -540,14 +598,13 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			started = true;
 			catchingUp = true;
 			startPromise = (async () => {
-				const ctx = makeWatchCtx();
 				await Promise.all(
 					providers.map(async (provider) => {
 						try {
-							const unwatch = await provider.watch(ctx);
+							const unwatch = await provider.watch(makeWatchCtx(provider));
 							unwatches.push(unwatch);
 						} catch (error) {
-							emit('error', { provider: provider.id, error } satisfies ProviderError);
+							providerFailed(provider, error);
 						}
 					}),
 				);
@@ -568,6 +625,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 					// ignore
 				}
 			}
+			for (const id of live.keys()) forget(id);
 			live.clear();
 			await createdProcesses?.close();
 			startPromise = undefined;
@@ -575,12 +633,11 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		},
 		async reconcile(pid) {
 			if (!started) return;
-			const ctx = makeWatchCtx();
 			for (const provider of providers) {
 				try {
-					await provider.revalidate?.(ctx, pid);
+					await provider.revalidate?.(makeWatchCtx(provider), pid);
 				} catch (error) {
-					emit('error', { provider: provider.id, error } satisfies ProviderError);
+					providerFailed(provider, error);
 				}
 			}
 		},
@@ -589,67 +646,34 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			return [...live.values()].map(attachSession);
 		},
 		async sessions(filter) {
-			const byId = new Map<string, Session>();
-			for (const entry of history.values()) {
-				const session = attachSession(entry);
-				if (matches(session, filter)) byId.set(session.id, session);
-			}
-			for (const provider of providers) {
-				if (!provider.list) continue;
-				try {
-					for await (const snap of provider.list(
-						makeListCtx(filter, filter ? undefined : undefined),
-					)) {
-						const listed = snapshotToSession(
-							snap,
-							provider,
-							transcriptFor,
-							eventsFor,
-							subagentsFor,
-							live.get(snap.id),
-						);
-						if (matches(listed, filter)) {
-							const existing = byId.get(listed.id);
-							if (!existing || live.has(listed.id)) byId.set(listed.id, listed);
-							else if (!live.has(listed.id) && !history.has(listed.id)) byId.set(listed.id, listed);
-							void existing;
+			// What is held in memory wins: it carries activity and status a snapshot cannot.
+			const out = [...live.values(), ...history.values()].map(attachSession);
+			if (filter?.live !== true) {
+				for (const provider of providers) {
+					if (!provider.list) continue;
+					try {
+						for await (const snap of provider.list(makeListCtx(filter))) {
+							if (live.has(snap.id) || history.has(snap.id)) continue;
+							out.push(snapshotToSession(snap, provider));
 						}
+					} catch (error) {
+						providerFailed(provider, error);
 					}
-				} catch (error) {
-					emit('error', { provider: provider.id, error } satisfies ProviderError);
 				}
 			}
-			for (const entry of live.values()) {
-				const session = attachSession(entry);
-				if (matches(session, filter)) byId.set(session.id, session);
-			}
-			if (filter?.live === true) {
-				return [...live.values()].map(attachSession).filter((s) => matches(s, filter));
-			}
-			return [...byId.values()];
+			return out.filter((session) => matches(session, filter));
 		},
 		async get(id) {
-			const liveHit = live.get(id);
-			if (liveHit) return attachSession(liveHit);
-			const hist = history.get(id);
-			if (hist) return attachSession(hist);
+			const held = live.get(id) ?? history.get(id);
+			if (held) return attachSession(held);
 			for (const provider of providers) {
 				if (!provider.list) continue;
 				try {
 					for await (const snap of provider.list(makeListCtx(undefined, id))) {
-						if (snap.id === id) {
-							return snapshotToSession(
-								snap,
-								provider,
-								transcriptFor,
-								eventsFor,
-								subagentsFor,
-								undefined,
-							);
-						}
+						if (snap.id === id) return snapshotToSession(snap, provider);
 					}
 				} catch (error) {
-					emit('error', { provider: provider.id, error } satisfies ProviderError);
+					providerFailed(provider, error);
 				}
 			}
 			return undefined;
@@ -657,50 +681,4 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 	};
 
 	return api;
-}
-
-function snapshotToSession(
-	snap: SessionSnapshot,
-	provider: Provider,
-	transcriptFor: (id: string) => AsyncIterable<Turn>,
-	eventsFor: (id: string) => AsyncIterable<SessionEvent>,
-	subagentsFor: (id: string) => Promise<Subagent[]>,
-	live: LiveEntry | undefined,
-): Session {
-	if (live) {
-		return {
-			id: live.id,
-			harness: live.harness,
-			provider: live.provider,
-			activity: live.activity,
-			pid: live.pid,
-			cwd: live.cwd,
-			title: live.title,
-			status: live.status,
-			waitingFor: live.status === 'waiting' ? live.waitingFor : undefined,
-			startedAt: live.startedAt,
-			updatedAt: live.updatedAt,
-			kind: live.kind,
-			model: live.model,
-			transcript: () => transcriptFor(live.id),
-			events: () => eventsFor(live.id),
-			subagents: () => subagentsFor(live.id),
-		};
-	}
-	const session: Session = {
-		id: snap.id,
-		harness: snap.harness,
-		provider: snap.provider ?? provider.id,
-		activity: emptyActivity(),
-		transcript: () => transcriptFor(snap.id),
-		events: () => eventsFor(snap.id),
-		subagents: () => subagentsFor(snap.id),
-	};
-	if (snap.cwd) session.cwd = snap.cwd;
-	if (snap.title) session.title = snap.title;
-	if (snap.startedAt != null) session.startedAt = snap.startedAt;
-	if (snap.updatedAt != null) session.updatedAt = snap.updatedAt;
-	if (snap.kind) session.kind = snap.kind;
-	if (snap.model) session.model = snap.model;
-	return session;
 }

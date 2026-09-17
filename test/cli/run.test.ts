@@ -254,6 +254,21 @@ test('provider errors show on the status line without crashing', async () => {
 	assert.equal(await exit, 0);
 });
 
+test('listener errors show on the status line labelled with the event', async () => {
+	const t = setup();
+	await t.driver.createLiveSession({ id: 'a', pid: 11, status: 'busy' });
+	const exit = t.start();
+	await waitFor(() => /1 live/.test(t.stdout.lastFrame));
+	t.instance()?.on('session:status', () => {
+		throw new Error('listener bug');
+	});
+	await t.driver.rewriteStatus('a', 'waiting');
+	await waitFor(() => /error \[session:status\] listener bug/.test(t.stdout.lastFrame));
+	assert.match(t.stdout.lastFrame, /1 waiting/);
+	t.key('q');
+	assert.equal(await exit, 0);
+});
+
 test('SIGINT exits 0 and restores', async () => {
 	const t = setup();
 	const exit = t.start();

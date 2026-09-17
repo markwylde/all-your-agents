@@ -53,7 +53,8 @@ export type ViewState = {
 	detail: boolean;
 	help: boolean;
 	showClosed: boolean;
-	lastError?: { provider: string; message: string };
+	/** `origin` is the provider id, or the event whose listener threw. */
+	lastError?: { origin: string; message: string };
 	quit: boolean;
 	cols: number;
 	rows: number;
@@ -98,7 +99,7 @@ export type ViewEvent =
 	| { type: 'subagent'; name: 'start' | 'end'; subagent: SubagentLike; session: SessionLike }
 	| { type: 'subagents'; sessionId: string; list: SubagentLike[] }
 	| { type: 'ready'; live: SessionLike[] }
-	| { type: 'error'; provider: string; message: string }
+	| { type: 'error'; origin: string; message: string }
 	| { type: 'resize'; cols: number; rows: number };
 
 export type Key =
@@ -247,7 +248,7 @@ export function applyEvent(state: ViewState, event: ViewEvent): ViewState {
 			return normalize({ ...state, ...fresh, sessions, ready: true });
 		}
 		case 'error':
-			return { ...state, lastError: { provider: event.provider, message: event.message } };
+			return { ...state, lastError: { origin: event.origin, message: event.message } };
 		case 'resize':
 			return normalize({ ...state, cols: event.cols, rows: event.rows });
 	}

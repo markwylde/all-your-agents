@@ -32,7 +32,9 @@ function collect(aya: ReturnType<typeof AllYourAgents>) {
 	aya.on('subagent:start', (sub, session) => events.push(`subagent:start:${sub.id}:${session.id}`));
 	aya.on('subagent:end', (sub, session) => events.push(`subagent:end:${sub.id}:${session.id}`));
 	aya.on('ready', () => events.push('ready'));
-	aya.on('error', (e) => events.push(`error:${e.provider}`));
+	aya.on('error', (e) =>
+		events.push(`error:${e.source === 'provider' ? e.provider : `listener:${e.event}`}`),
+	);
 	return events;
 }
 
@@ -208,7 +210,9 @@ test('provider failure isolation', async () => {
 		processes: { info: async () => ({ alive: true }), watch: () => 'unsupported' },
 	});
 	const events: string[] = [];
-	aya.on('error', (e) => events.push(`error:${e.provider}`));
+	aya.on('error', (e) =>
+		events.push(`error:${e.source === 'provider' ? e.provider : `listener:${e.event}`}`),
+	);
 	aya.on('session:create', (s) => events.push(`create:${s.id}`));
 	aya.on('ready', () => events.push('ready'));
 	await aya.start();

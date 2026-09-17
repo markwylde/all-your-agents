@@ -1,5 +1,5 @@
 import { emitKeypressEvents } from 'node:readline';
-import type { AllYourAgentsInstance, Session, Subagent } from '../index.ts';
+import type { AgentsError, AllYourAgentsInstance, Session, Subagent } from '../index.ts';
 import { CLEAR_LINE_END, CLEAR_SCREEN_END, ENTER_SCREEN, HOME, LEAVE_SCREEN } from './ansi.ts';
 import { COMMAND, parseArgs, USAGE } from './args.ts';
 import { type ReadlineKey, toKey } from './keys.ts';
@@ -48,6 +48,11 @@ function write(out: RunOutput, text: string): Promise<void> {
 	});
 }
 
+/** Where an error came from: the provider id, or the event whose listener threw. */
+function origin(e: AgentsError): string {
+	return e.source === 'provider' ? e.provider : e.event;
+}
+
 function message(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
@@ -73,7 +78,7 @@ export async function run(opts: RunOptions): Promise<number> {
 
 	if (args.mode !== 'tui' || !opts.stdout.isTTY) {
 		const aya = opts.createInstance();
-		aya.on('error', (e) => opts.stderr.write(`${COMMAND}: ${e.provider}: ${message(e.error)}\n`));
+		aya.on('error', (e) => opts.stderr.write(`${COMMAND}: ${origin(e)}: ${message(e.error)}\n`));
 		try {
 			await aya.start();
 			const live = aya.running();
@@ -197,9 +202,7 @@ function interactive(
 		for (const s of sessions) live.set(s.id, s);
 		dispatch({ type: 'ready', live: sessions });
 	});
-	aya.on('error', (e) =>
-		dispatch({ type: 'error', provider: e.provider, message: message(e.error) }),
-	);
+	aya.on('error', (e) => dispatch({ type: 'error', origin: origin(e), message: message(e.error) }));
 
 	listen(stdin, 'keypress', ((str: string | undefined, raw: ReadlineKey | undefined) => {
 		const key = toKey(str, raw);

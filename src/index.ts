@@ -38,9 +38,9 @@ export type {
 	WatchContext,
 } from './provider.ts';
 export type {
+	AgentsError,
 	EventMeta,
 	Harness,
-	ProviderError,
 	Session,
 	SessionActivity,
 	SessionEvent,

@@ -1,14 +1,24 @@
 import { basename, dirname } from 'node:path';
-import { decodeUtf8 } from './bytes.ts';
 import { systemClock } from './clock.ts';
 import { coalesce } from './coalesce.ts';
 import type { DebounceOptions, Fs, WatchHandle } from './types.ts';
 
-export type TailJsonlHandle = AsyncIterable<unknown> & {
-	close(): void;
+export type TailJsonlOptions = DebounceOptions & {
+	/**
+	 * `'separate'` delivers the records already in the file through `backlog` instead of
+	 * through iteration, so a caller can tell stored records from live ones without
+	 * reading the file twice.
+	 */
+	backlog?: 'separate';
 };
 
-export function tailJsonl(fs: Fs, path: string, opts: DebounceOptions = {}): TailJsonlHandle {
+export type TailJsonlHandle = AsyncIterable<unknown> & {
+	close(): void;
+	/** The records present when the tail opened, or `[]` unless `backlog: 'separate'`. */
+	backlog: Promise<unknown[]>;
+};
+
+export function tailJsonl(fs: Fs, path: string, opts: TailJsonlOptions = {}): TailJsonlHandle {
 	const quietMs = opts.quietMs ?? 25;
 	const maxLatencyMs = opts.maxLatencyMs ?? 1000;
 	const clock = opts.clock ?? systemClock;
@@ -16,18 +26,25 @@ export function tailJsonl(fs: Fs, path: string, opts: DebounceOptions = {}): Tai
 	const queue: unknown[] = [];
 	let wake: (() => void) | undefined;
 	let closed = false;
+	let failure: { error: unknown } | undefined;
 	let offset = 0;
 	let partial = '';
+	// Reads end wherever the writer happens to be, which can be inside a character.
+	let decoder = new TextDecoder();
 	let reading = false;
 	let queued = false;
 
-	const push = (item: unknown): void => {
-		queue.push(item);
+	const wakeUp = (): void => {
 		wake?.();
 		wake = undefined;
 	};
 
-	const parseChunk = (text: string): void => {
+	const push = (item: unknown): void => {
+		queue.push(item);
+		wakeUp();
+	};
+
+	const parseChunk = (text: string, sink: (item: unknown) => void): void => {
 		const data = partial + text;
 		const lines = data.split('\n');
 		partial = lines.pop() ?? '';
@@ -35,43 +52,56 @@ export function tailJsonl(fs: Fs, path: string, opts: DebounceOptions = {}): Tai
 			const trimmed = line.trim();
 			if (!trimmed) continue;
 			try {
-				push(JSON.parse(trimmed));
+				sink(JSON.parse(trimmed));
 			} catch {
 				// skip malformed complete lines
 			}
 		}
 	};
 
-	const readToEnd = async (): Promise<void> => {
+	const readToEnd = async (sink: (item: unknown) => void): Promise<void> => {
 		if (closed) return;
+		const st = await fs.stat(path);
+		if (!st) return;
+		if (st.size < offset) {
+			offset = 0;
+			partial = '';
+			decoder = new TextDecoder();
+		}
+		if (st.size === offset) return;
+		const bytes = await fs.readRange(path, offset, st.size);
+		offset += bytes.byteLength;
+		parseChunk(decoder.decode(bytes, { stream: true }), sink);
+	};
+
+	const fail = (error: unknown): void => {
+		if (closed || failure) return;
+		failure = { error };
+		wakeUp();
+	};
+
+	const readAppended = async (): Promise<void> => {
 		reading = true;
 		try {
-			const st = await fs.stat(path);
-			if (!st) return;
-			if (st.size < offset) {
-				offset = 0;
-				partial = '';
-			}
-			if (st.size === offset) return;
-			const bytes = await fs.readRange(path, offset, st.size);
-			offset += bytes.byteLength;
-			parseChunk(decodeUtf8(bytes));
+			await readToEnd(push);
+		} catch (error) {
+			fail(error);
 		} finally {
 			reading = false;
-			if (queued && !closed) {
+			if (queued && !closed && !failure) {
 				queued = false;
-				void readToEnd();
+				void readAppended();
 			}
 		}
 	};
 
 	const requestRead = (): void => {
-		if (closed) return;
+		if (closed || failure) return;
 		if (reading) {
 			queued = true;
 			return;
 		}
-		void readToEnd();
+		void readAppended();
 	};
 
 	let handle: WatchHandle | undefined;
@@ -85,8 +115,7 @@ export function tailJsonl(fs: Fs, path: string, opts: DebounceOptions = {}): Tai
 		}
 	}
 
-	void (async () => {
-		await readToEnd();
+	const follow = async (): Promise<void> => {
 		if (!handle || closed) return;
 		const name = basename(path);
 		try {
@@ -98,19 +127,33 @@ export function tailJsonl(fs: Fs, path: string, opts: DebounceOptions = {}): Tai
 		} catch {
 			// ended
 		}
+	};
+
+	// The watch is already open, so nothing appended during the first read is lost.
+	const firstRead = (async (): Promise<unknown[]> => {
+		const stored: unknown[] = [];
+		reading = true;
+		try {
+			await readToEnd(opts.backlog === 'separate' ? (item) => stored.push(item) : push);
+		} finally {
+			reading = false;
+		}
+		return stored;
 	})();
+
+	void firstRead.then(follow, fail);
 
 	const close = (): void => {
 		if (closed) return;
 		closed = true;
 		coalescer.dispose();
 		handle?.close();
-		wake?.();
-		wake = undefined;
+		wakeUp();
 	};
 
 	return {
 		close,
+		backlog: firstRead,
 		async *[Symbol.asyncIterator]() {
 			try {
 				while (!closed || queue.length > 0) {
@@ -119,6 +162,7 @@ export function tailJsonl(fs: Fs, path: string, opts: DebounceOptions = {}): Tai
 						yield next;
 						continue;
 					}
+					if (failure) throw failure.error;
 					if (closed) break;
 					await new Promise<void>((resolve) => {
 						wake = resolve;
