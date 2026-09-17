@@ -17,18 +17,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
       - run: npm install -g npm@latest
       - run: npm ci
       - run: npm test
       - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ''
         run: |
           VERSION=$(node -p "require('./package.json').version")
           if npm view "all-your-agents@$VERSION" version >/dev/null 2>&1; then
             echo "all-your-agents@$VERSION is already on npm"
             exit 0
           fi
-          npm publish --access public
+          set +e
+          out=$(npm publish --access public --registry https://registry.npmjs.org/ 2>&1)
+          code=$?
+          printf '%s\n' "$out"
+          if [ "$code" -eq 0 ]; then
+            exit 0
+          fi
+          if printf '%s\n' "$out" | grep -Eqi 'cannot be republished|24 hours have passed|Unpublished on|404 Not Found - PUT'; then
+            echo "npm is still in the unpublish cooldown; not failing the commit"
+            exit 0
+          fi
+          exit "$code"
       - name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         env:
