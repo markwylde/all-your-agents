@@ -633,6 +633,9 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			if (!path) return;
 			if (inspectCtx.follow) {
 				const tail = tailJsonl(inspectCtx.fs, path);
+				const stop = (): void => tail.close();
+				inspectCtx.signal?.addEventListener('abort', stop, { once: true });
+				if (inspectCtx.signal?.aborted) stop();
 				try {
 					for await (const rec of tail) {
 						const mapped = mapRecord(rec);
@@ -640,6 +643,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 						else yield { kind: 'other', raw: rec };
 					}
 				} finally {
+					inspectCtx.signal?.removeEventListener('abort', stop);
 					tail.close();
 				}
 				return;

@@ -46,13 +46,19 @@ export type SessionSnapshot = {
 	model?: string;
 };
 
+/**
+ * Stored records, then appended ones, until the consumer stops: by ending iteration or
+ * by `close()`. Either works while a `next()` is pending, and releases the watch.
+ */
+export type SessionEventStream = AsyncIterable<SessionEvent> & { close(): void };
+
 export type Session = SessionSnapshot & {
 	activity: SessionActivity;
 	pid?: number;
 	status?: SessionStatus;
 	waitingFor?: string;
 	transcript(): AsyncIterable<Turn>;
-	events(): AsyncIterable<SessionEvent>;
+	events(): SessionEventStream;
 	subagents(): Promise<Subagent[]>;
 };
 
@@ -68,7 +74,7 @@ export type Subagent = {
 	startedAt?: number;
 	endedAt?: number;
 	transcript(): AsyncIterable<Turn>;
-	events(): AsyncIterable<SessionEvent>;
+	events(): SessionEventStream;
 };
 
 export type SessionEvent =

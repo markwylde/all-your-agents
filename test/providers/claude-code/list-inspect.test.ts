@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { AllYourAgents } from '../../../src/index.js';
 import { claudeCode } from '../../../src/providers/claude-code/index.js';
 import { encodeProjectDir } from '../../../src/providers/claude-code/paths.js';
+import { spyFs } from '../../util/spy-fs.js';
 import { waitFor } from '../../util/wait.js';
 
 const ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -97,6 +98,41 @@ test('events() tails appends and break closes the watch', async () => {
 		await rm(home, { recursive: true, force: true });
 	}
 });
+
+for (const how of ['close()', 'return()'] as const) {
+	test(`events() stops with ${how} while waiting for the next record`, async () => {
+		const home = await mkdtemp(join(tmpdir(), 'aya-ins-'));
+		try {
+			const dir = join(home, 'projects', encodeProjectDir('/tmp/app'));
+			await mkdir(dir, { recursive: true });
+			const path = join(dir, `${ID}.jsonl`);
+			await writeFile(
+				path,
+				`${JSON.stringify({ type: 'user', sessionId: ID, message: { content: 'one' } })}\n`,
+			);
+			const fs = spyFs();
+			const aya = AllYourAgents({
+				providers: [claudeCode({ home })],
+				processes: { info: async () => ({ alive: false }), watch: () => 'unsupported' },
+				fs,
+			});
+			const session = await aya.get(ID);
+			assert.ok(session);
+			const stream = session.events();
+			const iter = stream[Symbol.asyncIterator]();
+			assert.equal((await iter.next()).done, false);
+			// Nothing more will ever be written: this next() would wait forever.
+			const pending = iter.next();
+			await waitFor(() => fs.openWatches().length === 1);
+			if (how === 'close()') stream.close();
+			else void iter.return?.();
+			assert.equal((await pending).done, true);
+			assert.deepEqual(fs.openWatches(), []);
+		} finally {
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+}
 
 test('worktree move emits update only and does not close', async () => {
 	const home = await mkdtemp(join(tmpdir(), 'aya-rel-'));

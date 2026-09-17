@@ -44,6 +44,7 @@ export type {
 	Session,
 	SessionActivity,
 	SessionEvent,
+	SessionEventStream,
 	SessionFilter,
 	SessionKind,
 	SessionSnapshot,

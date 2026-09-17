@@ -58,9 +58,12 @@ const session = {
 	transcript: async function* () {
 		yield turn;
 	},
-	events: async function* () {
-		yield* events;
-	},
+	events: () => ({
+		close() {},
+		async *[Symbol.asyncIterator]() {
+			yield* events;
+		},
+	}),
 	subagents: async () => [] as Subagent[],
 } satisfies Session;
 

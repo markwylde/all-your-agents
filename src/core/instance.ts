@@ -21,6 +21,7 @@ import type {
 	Session,
 	SessionActivity,
 	SessionEvent,
+	SessionEventStream,
 	SessionFilter,
 	SessionKind,
 	SessionSnapshot,
@@ -484,9 +485,14 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		id,
 	});
 
-	const makeInspectCtx = (follow: boolean, subagentId?: string): InspectContext => ({
+	const makeInspectCtx = (
+		follow: boolean,
+		subagentId?: string,
+		signal?: AbortSignal,
+	): InspectContext => ({
 		fs,
 		follow,
+		signal,
 		subagentId,
 	});
 
@@ -503,12 +509,30 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		for (const turn of groupTurns(events)) yield turn;
 	}
 
-	function eventsFor(
-		providerId: string,
-		id: string,
-		subagentId?: string,
-	): AsyncIterable<SessionEvent> {
-		return iterateEvents(providerId, id, subagentId, true);
+	/**
+	 * `return()` on an async generator waits behind a pending `next()`, so an idle tail
+	 * could never be stopped through the generator alone. Aborting tells the provider to
+	 * close its tail, which resolves that `next()` and lets the chain unwind.
+	 */
+	function eventsFor(providerId: string, id: string, subagentId?: string): SessionEventStream {
+		const controller = new AbortController();
+		let inner: AsyncIterator<SessionEvent> | undefined;
+		return {
+			close: () => controller.abort(),
+			[Symbol.asyncIterator]() {
+				inner ??= iterateEvents(providerId, id, subagentId, true, controller.signal)[
+					Symbol.asyncIterator
+				]();
+				const iterator = inner;
+				return {
+					next: () => iterator.next(),
+					return: async (value?: unknown) => {
+						controller.abort();
+						return (await iterator.return?.(value)) ?? { done: true, value: undefined };
+					},
+				};
+			},
+		};
 	}
 
 	async function* iterateEvents(
@@ -516,10 +540,11 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		id: string,
 		subagentId: string | undefined,
 		follow: boolean,
-	): AsyncIterable<SessionEvent> {
+		signal?: AbortSignal,
+	): AsyncGenerator<SessionEvent> {
 		const provider = providerOf(providerId);
-		if (!provider?.inspect) return;
-		yield* provider.inspect(makeInspectCtx(follow, subagentId), id);
+		if (!provider?.inspect || signal?.aborted) return;
+		yield* provider.inspect(makeInspectCtx(follow, subagentId, signal), id);
 	}
 
 	async function subagentsFor(providerId: string, id: string): Promise<Subagent[]> {

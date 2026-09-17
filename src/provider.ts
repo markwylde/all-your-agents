@@ -112,6 +112,8 @@ export type ListContext = {
 export type InspectContext = {
 	fs: Fs;
 	follow?: boolean;
+	/** Aborts when the consumer stops. A provider that is following must then finish. */
+	signal?: AbortSignal;
 	subagentId?: string;
 	home?: string;
 };
