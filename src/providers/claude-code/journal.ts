@@ -58,7 +58,7 @@ export function isInterruption(text: string): boolean {
 	return text.startsWith('[Request interrupted by user');
 }
 
-function contentOf(rec: Record<string, unknown>): unknown {
+export function contentOf(rec: Record<string, unknown>): unknown {
 	const message = rec.message;
 	if (message && typeof message === 'object' && 'content' in message) {
 		return (message as { content: unknown }).content;
@@ -66,7 +66,7 @@ function contentOf(rec: Record<string, unknown>): unknown {
 	return rec.content;
 }
 
-function textOf(content: unknown): string | undefined {
+export function textOf(content: unknown): string | undefined {
 	if (typeof content === 'string') return content;
 	if (!Array.isArray(content)) return undefined;
 	const parts: string[] = [];
@@ -79,6 +79,23 @@ function textOf(content: unknown): string | undefined {
 	return parts.length ? parts.join('') : undefined;
 }
 
+/** Claude Code writes this on assistant records it generated itself, such as API errors. */
+const SYNTHETIC_MODEL = '<synthetic>';
+
+/** The model that produced an assistant record, or undefined for any other record. */
+export function modelOf(rec: unknown): string | undefined {
+	if (!rec || typeof rec !== 'object') return undefined;
+	const row = rec as Record<string, unknown>;
+	if (row.type !== 'assistant' || !row.message || typeof row.message !== 'object') return undefined;
+	const model = (row.message as Record<string, unknown>).model;
+	return typeof model === 'string' && model && model !== SYNTHETIC_MODEL ? model : undefined;
+}
+
+/** The title a session takes from its first real prompt. */
+export function promptTitle(text: string): string {
+	return text.slice(0, 200);
+}
+
 export function mapRecord(rec: unknown): SessionEvent[] {
 	if (!rec || typeof rec !== 'object') return [];
 	const row = rec as Record<string, unknown>;
@@ -88,18 +105,11 @@ export function mapRecord(rec: unknown): SessionEvent[] {
 
 	if (typeof type === 'string' && UNMAPPED.has(type)) return [];
 	if (type === 'system') {
-		const subtype = row.subtype;
-		if (subtype === 'turn_duration') return [{ kind: 'turn-end', outcome: 'completed', ...base }];
-		if (
-			subtype === 'compact_boundary' ||
-			subtype === 'stop_hook_summary' ||
-			subtype === 'away_summary' ||
-			subtype === 'local_command' ||
-			subtype === 'informational'
-		) {
-			return [];
+		// Every other subtype is bookkeeping. `agents_killed` ends subagents, which the
+		// live provider reports from the record itself since it names no subagent.
+		if (row.subtype === 'turn_duration') {
+			return [{ kind: 'turn-end', outcome: 'completed', ...base }];
 		}
-		if (subtype === 'agents_killed') return [];
 		return [];
 	}
 	if (type === 'ai-title') {
@@ -146,7 +156,7 @@ export function mapRecord(rec: unknown): SessionEvent[] {
 			row.message && typeof row.message === 'object'
 				? (row.message as Record<string, unknown>)
 				: {};
-		const model = typeof message.model === 'string' ? message.model : undefined;
+		const model = modelOf(row);
 		const content = contentOf(row);
 		const events: SessionEvent[] = [];
 		if (typeof content === 'string' && content) {

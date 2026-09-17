@@ -1,32 +1,12 @@
 import type { TurnFact } from '../../types.ts';
 import {
+	contentOf,
 	isInjectedText,
 	isInterruption,
 	isTaskNotification,
 	recordTime,
-	toolResultText,
+	textOf,
 } from './journal.ts';
-
-function contentOf(rec: Record<string, unknown>): unknown {
-	const message = rec.message;
-	if (message && typeof message === 'object' && 'content' in message) {
-		return (message as { content: unknown }).content;
-	}
-	return rec.content;
-}
-
-function textOf(content: unknown): string | undefined {
-	if (typeof content === 'string') return content;
-	if (!Array.isArray(content)) return undefined;
-	const parts: string[] = [];
-	for (const part of content) {
-		if (part && typeof part === 'object' && (part as { type?: string }).type === 'text') {
-			const text = (part as { text?: unknown }).text;
-			if (typeof text === 'string') parts.push(text);
-		}
-	}
-	return parts.length ? parts.join('') : undefined;
-}
 
 export function turnFactsFromRecord(rec: unknown): TurnFact[] {
 	if (!rec || typeof rec !== 'object') return [];
@@ -76,7 +56,6 @@ export function turnFactsFromRecord(rec: unknown): TurnFact[] {
 				if (p.type === 'tool_use' && typeof p.id === 'string' && typeof p.name === 'string') {
 					facts.push({ type: 'tool-started', id: p.id, name: p.name, startedAt: at });
 				}
-				void toolResultText;
 			}
 		}
 		if (message.stop_reason === 'end_turn') {

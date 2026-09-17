@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { createLocalFs } from '../../src/helpers/fs.js';
 import { tailJsonl } from '../../src/helpers/tail-jsonl.js';
-import { sleep } from '../util/wait.js';
+import { spyFs } from '../util/spy-fs.js';
+import { sleep, waitFor } from '../util/wait.js';
 
 test('tailJsonl yields complete lines, keeps partial, handles append during replay', async () => {
 	const dir = await mkdtemp(join(tmpdir(), 'aya-tail-'));
@@ -111,6 +112,84 @@ test('30 appends/s yields every line in order with about one read per second', a
 		await consume;
 		assert.deepEqual(got, [...Array(30).keys()]);
 		assert.ok(reads >= 1 && reads <= 6, `expected about one read per second, got ${reads}`);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('backlog: separate hands over stored records once, iteration yields only appends', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'aya-tail-'));
+	const path = join(dir, 'j.jsonl');
+	const stored = '{"n":1}\n{"n":2}\n';
+	await writeFile(path, stored);
+	try {
+		const fs = spyFs();
+		const tail = tailJsonl(fs, path, { quietMs: 15, backlog: 'separate' });
+		assert.deepEqual(await tail.backlog, [{ n: 1 }, { n: 2 }]);
+		const iter = tail[Symbol.asyncIterator]();
+		const appended = '{"n":3}\n';
+		await appendFile(path, appended);
+		assert.deepEqual((await iter.next()).value, { n: 3 });
+		assert.equal(fs.bytesRead.get(path), stored.length + appended.length, 'each byte read once');
+		await iter.return?.(undefined);
+		assert.deepEqual(fs.openWatches(), []);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('without the option backlog is empty and iteration yields everything', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'aya-tail-'));
+	const path = join(dir, 'j.jsonl');
+	await writeFile(path, '{"n":1}\n');
+	try {
+		const tail = tailJsonl(createLocalFs(), path, { quietMs: 15 });
+		assert.deepEqual(await tail.backlog, []);
+		const iter = tail[Symbol.asyncIterator]();
+		assert.deepEqual((await iter.next()).value, { n: 1 });
+		await iter.return?.(undefined);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('a multi-byte character split across two reads is yielded intact', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'aya-tail-'));
+	const path = join(dir, 'j.jsonl');
+	const line = Buffer.from(`${JSON.stringify({ text: 'naïve 🚀 done' })}\n`);
+	const cut = line.indexOf(Buffer.from('🚀')) + 2; // inside the four-byte rocket
+	await writeFile(path, line.subarray(0, cut));
+	try {
+		const fs = spyFs();
+		const tail = tailJsonl(fs, path, { quietMs: 15 });
+		const iter = tail[Symbol.asyncIterator]();
+		const next = iter.next();
+		await waitFor(() => fs.bytesRead.get(path) === cut);
+		await appendFile(path, line.subarray(cut));
+		assert.deepEqual((await next).value, { text: 'naïve 🚀 done' });
+		await iter.return?.(undefined);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('a read failure ends iteration with that error, not an unhandled rejection', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'aya-tail-'));
+	const path = join(dir, 'j.jsonl');
+	await writeFile(path, '{"n":1}\n');
+	try {
+		const fs = {
+			...createLocalFs(),
+			readRange: async (): Promise<Uint8Array> => {
+				throw new Error('disk gone');
+			},
+		};
+		const tail = tailJsonl(fs, path, { quietMs: 15 });
+		await assert.rejects(async () => {
+			for await (const _ of tail) {
+				// drain
+			}
+		}, /disk gone/);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

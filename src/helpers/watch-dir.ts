@@ -2,7 +2,7 @@ import { basename, dirname, join } from 'node:path';
 import { systemClock } from './clock.ts';
 import type { Coalescer } from './coalesce.ts';
 import { coalesce } from './coalesce.ts';
-import type { DebounceOptions, DirChange, Fs, FsStat } from './types.ts';
+import type { DebounceOptions, DirChange, Fs, WatchHandle } from './types.ts';
 
 export type WatchDirHandle = {
 	close(): void;
@@ -20,152 +20,156 @@ export function watchDir(
 	const clock = opts.clock ?? systemClock;
 	const coalescer = coalesce(quietMs, maxLatencyMs, clock);
 	let closed = false;
-	let current: { close(): void } | undefined;
-	let resolveReady: () => void = () => {};
-	const ready = new Promise<void>((resolve) => {
-		resolveReady = resolve;
-	});
+	let current: WatchHandle | undefined;
 
-	const start = (): void => {
-		void bind(path).finally(() => resolveReady());
-	};
-
-	const bind = async (target: string): Promise<void> => {
-		if (closed) return;
-		const st = await fs.stat(target);
-		if (closed) return;
-		if (st?.isDirectory) {
-			await watchExisting(target);
-			return;
-		}
-		await watchAncestor(target);
-	};
-
-	const watchExisting = async (dir: string): Promise<void> => {
-		if (closed) return;
-		const known = new Map<string, FsStat | true>();
+	/** Open a watch, unless closed. Never await between the `closed` check and `current`. */
+	const open = (target: string): WatchHandle | undefined => {
+		if (closed) return undefined;
 		try {
-			const names = await fs.readDir(dir);
-			for (const name of names) {
-				if (closed) return;
-				const child = join(dir, name);
-				const st = await fs.stat(child);
-				known.set(name, st ?? true);
-				onChange({ type: 'create', name, path: child });
-			}
+			current = fs.watch(target);
+			return current;
 		} catch {
-			if (closed) return;
-			await watchAncestor(dir);
+			return undefined;
+		}
+	};
+
+	const release = (handle: WatchHandle): void => {
+		handle.close();
+		if (current === handle) current = undefined;
+	};
+
+	/** Watch `path` if it is a directory, otherwise wait for it under its nearest ancestor. */
+	const bind = async (): Promise<void> => {
+		if (closed) return;
+		const st = await fs.stat(path);
+		if (st?.isDirectory) await watchEntries();
+		else await awaitDirectory();
+	};
+
+	const watchEntries = async (): Promise<void> => {
+		// Watch before scanning, so an entry created while the scan runs is still reported.
+		const handle = open(path);
+		if (!handle) {
+			await awaitDirectory();
 			return;
 		}
+		const known = new Set<string>();
+		let gone = false;
 
-		const handle = fs.watch(dir);
-		current = handle;
-		const serviceName = async (name: string): Promise<void> => {
-			if (closed) return;
-			const child = join(dir, name);
-			const st = await fs.stat(child);
-			const had = known.has(name);
-			if (st) {
-				known.set(name, st);
-				onChange({ type: had ? 'change' : 'create', name, path: child });
-			} else if (had) {
+		/** The directory itself went away: everything in it did too. Wait for it to return. */
+		const directoryGone = async (): Promise<void> => {
+			if (gone || closed) return;
+			gone = true;
+			release(handle);
+			for (const name of [...known]) {
 				known.delete(name);
-				onChange({ type: 'delete', name, path: child });
+				onChange({ type: 'delete', name, path: join(path, name) });
+			}
+			await bind();
+		};
+
+		const serviceName = async (name: string): Promise<void> => {
+			if (closed || gone) return;
+			const child = join(path, name);
+			const st = await fs.stat(child);
+			if (closed || gone) return;
+			if (st) {
+				const type = known.has(name) ? 'change' : 'create';
+				known.add(name);
+				onChange({ type, name, path: child });
+				return;
+			}
+			if (known.delete(name)) onChange({ type: 'delete', name, path: child });
+			if (!(await fs.stat(path))?.isDirectory) await directoryGone();
+		};
+
+		const rescan = async (): Promise<void> => {
+			if (closed || gone) return;
+			let names: string[];
+			try {
+				names = await fs.readDir(path);
+			} catch {
+				await directoryGone();
+				return;
+			}
+			const seen = new Set(names);
+			for (const name of names) await serviceName(name);
+			for (const name of [...known]) {
+				if (!seen.has(name)) await serviceName(name);
 			}
 		};
 
 		void (async () => {
 			try {
 				for await (const event of handle) {
-					if (closed) break;
-					if (event.filename) {
-						const name = event.filename;
-						coalescer.notify(join(dir, name), () => {
-							void serviceName(name);
-						});
-					} else {
-						coalescer.notify(dir, () => {
-							void (async () => {
-								if (closed) return;
-								let names: string[] = [];
-								try {
-									names = await fs.readDir(dir);
-								} catch {
-									return;
-								}
-								const seen = new Set(names);
-								for (const name of names) {
-									await serviceName(name);
-								}
-								for (const name of [...known.keys()]) {
-									if (!seen.has(name)) await serviceName(name);
-								}
-							})();
-						});
-					}
+					if (closed || gone) return;
+					const name = event.filename;
+					if (name) coalescer.notify(join(path, name), () => void serviceName(name));
+					else coalescer.notify(path, () => void rescan());
 				}
 			} catch {
 				// watcher ended
 			}
+			if (closed || gone) return;
+			if (!(await fs.stat(path))?.isDirectory) await directoryGone();
 		})();
-	};
 
-	const watchAncestor = async (target: string): Promise<void> => {
-		if (closed) return;
-		const chain: string[] = [];
-		let cursor = target;
-		for (;;) {
-			const st = await fs.stat(cursor);
-			if (st) {
-				await watchUntilChild(cursor, chain);
-				return;
-			}
-			chain.unshift(cursor);
-			const parent = dirname(cursor);
-			if (parent === cursor) {
-				await watchUntilChild(cursor, chain);
-				return;
-			}
-			cursor = parent;
-		}
-	};
-
-	const watchUntilChild = async (existing: string, missing: string[]): Promise<void> => {
-		if (closed) return;
-		if (missing.length === 0) {
-			await watchExisting(existing);
+		let names: string[];
+		try {
+			names = await fs.readDir(path);
+		} catch {
+			await directoryGone();
 			return;
 		}
-		const next = missing[0];
-		if (!next) return;
-		const wanted = basename(next);
-		const handle = fs.watch(existing);
-		current = handle;
+		for (const name of names) {
+			if (closed || gone) return;
+			// An event may have reported it already; creation is reported once.
+			if (known.has(name)) continue;
+			known.add(name);
+			onChange({ type: 'create', name, path: join(path, name) });
+		}
+	};
+
+	/**
+	 * `path` is not a directory yet. Watch the nearest ancestor that is one, for the next
+	 * segment on the way to `path`. When that appears, `bind` again: either `path` now
+	 * exists or the nearest ancestor is one level deeper.
+	 */
+	const awaitDirectory = async (): Promise<void> => {
+		let wanted = path;
+		let existing = dirname(path);
+		while (existing !== wanted && !(await fs.stat(existing))?.isDirectory) {
+			wanted = existing;
+			existing = dirname(existing);
+		}
+		const handle = open(existing);
+		if (!handle) return;
+		const name = basename(wanted);
+		let found = false;
 		const check = async (): Promise<void> => {
-			if (closed) return;
-			const st = await fs.stat(next);
-			if (!st) return;
-			handle.close();
-			await bind(next);
+			if (closed || found) return;
+			if (!(await fs.stat(wanted))?.isDirectory) return;
+			if (closed || found) return;
+			found = true;
+			release(handle);
+			await bind();
 		};
-		void check();
 		void (async () => {
 			try {
 				for await (const event of handle) {
-					if (closed) break;
-					if (event.filename && event.filename !== wanted) continue;
-					coalescer.notify(next, () => {
-						void check();
-					});
+					if (closed || found) return;
+					if (event.filename && event.filename !== name) continue;
+					coalescer.notify(wanted, () => void check());
 				}
 			} catch {
 				// ended
 			}
 		})();
+		// It may have appeared between the stat that missed it and the watch opening.
+		await check();
 	};
 
-	start();
+	const ready = bind().catch(() => {});
 
 	return {
 		ready,
@@ -174,7 +178,6 @@ export function watchDir(
 			coalescer.dispose();
 			current?.close();
 			current = undefined;
-			resolveReady();
 		},
 	};
 }

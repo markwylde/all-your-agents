@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { decodeUtf8 } from '../../helpers/bytes.ts';
 import type { Fs } from '../../helpers/types.ts';
 import type { SessionKind, SessionSnapshot, TitleSource } from '../../types.ts';
-import { mapRecord, recordTime } from './journal.ts';
+import { mapRecord, modelOf, promptTitle, recordTime } from './journal.ts';
 import { projectsDir } from './paths.ts';
 import { mapKind } from './session-file.ts';
 
@@ -57,6 +57,7 @@ async function snapshotOf(
 	let startedAt: number | undefined;
 	let updatedAt: number | undefined;
 	let kind: SessionKind | undefined;
+	let model: string | undefined;
 	let first = true;
 	for (const line of head.split('\n')) {
 		if (!line.trim()) continue;
@@ -72,6 +73,7 @@ async function snapshotOf(
 			kind = mapKind(rec.kind, rec.entrypoint) ?? kind;
 		}
 		const at = recordTime(rec);
+		model = modelOf(rec) ?? model;
 		if (first) {
 			startedAt = at;
 			first = false;
@@ -82,7 +84,7 @@ async function snapshotOf(
 				else if (event.source === 'harness') titles.harness = event.title;
 				else if (event.source === 'prompt') titles.prompt = event.title;
 			}
-			if (event.kind === 'user' && !titles.prompt) titles.prompt = event.text.slice(0, 200);
+			if (event.kind === 'user' && !titles.prompt) titles.prompt = promptTitle(event.text);
 		}
 	}
 	for (const line of tail.split('\n')) {
@@ -92,6 +94,7 @@ async function snapshotOf(
 			const at = recordTime(rec);
 			if (at != null) updatedAt = at;
 			if (typeof rec.cwd === 'string') cwd = rec.cwd;
+			model = modelOf(rec) ?? model;
 		} catch {}
 	}
 	if (updatedAt == null) updatedAt = st.mtimeMs;
@@ -107,5 +110,6 @@ async function snapshotOf(
 	if (startedAt != null) snap.startedAt = startedAt;
 	if (updatedAt != null) snap.updatedAt = updatedAt;
 	if (kind) snap.kind = kind;
+	if (model) snap.model = model;
 	return snap;
 }

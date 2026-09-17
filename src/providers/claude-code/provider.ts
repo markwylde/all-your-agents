@@ -3,14 +3,18 @@ import { decodeUtf8 } from '../../helpers/bytes.ts';
 import { tailJsonl } from '../../helpers/tail-jsonl.ts';
 import type { ProcessWatchHandle } from '../../helpers/types.ts';
 import type { InspectContext, ListContext, Provider, WatchContext } from '../../provider.ts';
-import type { SessionActivity, SessionEvent, SubagentFacts, TurnFact } from '../../types.ts';
+import type { SessionEvent, SubagentFacts, TurnFact } from '../../types.ts';
 import { closeOpenTurn, turnFactsFromRecord } from './activity.ts';
 import {
+	contentOf,
 	isTaskNotification,
 	mapRecord,
+	modelOf,
 	parseTaskNotification,
+	promptTitle,
 	recordTime,
 	resolveJournal,
+	textOf,
 	toolResultText,
 } from './journal.ts';
 import { listSessions } from './list.ts';
@@ -40,15 +44,19 @@ type Bound = {
 	childCloses: Map<string, () => void>;
 	toolUseToAgent: Map<string, string>;
 	agents: Map<string, SubagentFacts>;
-	stale: boolean;
-	activity: SessionActivity;
 	openTool?: { id: string; name: string };
+	model?: string;
+	/** A `prompt` title has been reported; only the first real prompt is one. */
+	promptTitled: boolean;
+	/** Torn down. Work that was awaiting when that happened must not attach anything. */
+	released: boolean;
 };
+
+type Tail = AsyncIterable<unknown> & { close(): void };
 
 export function claudeCode(options: PathOptions = {}): Provider {
 	let ctx: WatchContext | undefined;
 	const bounds = new Map<number, Bound>();
-	const staleFiles = new Set<string>();
 	let processWatchUnsupported = false;
 	let closed = false;
 
@@ -68,7 +76,8 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		ctx?.emit('session:close', { id: bound.session.sessionId });
 	};
 
-	const teardown = (bound: Bound, markStale: boolean): void => {
+	const teardown = (bound: Bound): void => {
+		bound.released = true;
 		bound.journalClose?.();
 		bound.pendingJournalClose?.();
 		bound.subClose?.();
@@ -76,7 +85,6 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		bound.childCloses.clear();
 		bound.processWatch?.stop();
 		bounds.delete(bound.pid);
-		if (markStale) staleFiles.add(bound.filePath);
 	};
 
 	/**
@@ -123,6 +131,38 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		return facts;
 	}
 
+	const reportPromptTitle = (bound: Bound, text: string): void => {
+		if (bound.promptTitled) return;
+		bound.promptTitled = true;
+		ctx?.emit('title', { id: bound.session.sessionId, title: promptTitle(text), source: 'prompt' });
+	};
+
+	const reportModel = (bound: Bound, model: string | undefined): void => {
+		if (!model || model === bound.model) return;
+		bound.model = model;
+		ctx?.emit('session:update', { id: bound.session.sessionId, model });
+	};
+
+	/**
+	 * Handle every record a tail yields until it closes. One record that cannot be
+	 * handled is reported and skipped; it must not end the tail.
+	 */
+	const consume = (bound: Bound, tail: Tail, handle: (rec: unknown) => void): void => {
+		void (async () => {
+			try {
+				for await (const rec of tail) {
+					try {
+						handle(rec);
+					} catch (error) {
+						ctx?.reportError(error);
+					}
+				}
+			} catch (error) {
+				if (!bound.released) ctx?.reportError(error);
+			}
+		})();
+	};
+
 	const handleRecord = (bound: Bound, rec: unknown, fromChild?: string): void => {
 		if (!ctx || !rec || typeof rec !== 'object') return;
 		const row = rec as Record<string, unknown>;
@@ -134,50 +174,28 @@ export function claudeCode(options: PathOptions = {}): Provider {
 					source: event.source,
 				});
 			}
-			if (event.kind === 'subagent' && !fromChild) {
-				const agentId = event.id;
-				if (!bound.agents.has(agentId) && !bound.toolUseToAgent.has(event.id)) {
-					const facts: SubagentFacts = {
-						id: agentId,
-						sessionId: bound.session.sessionId,
-						harness: 'ClaudeCode',
-						type: event.type ?? 'Agent',
-						title: event.title,
-						background: event.background === true,
-						status: 'running',
-					};
-					bound.agents.set(agentId, facts);
-					bound.toolUseToAgent.set(event.id, agentId);
-					ctx.emit('subagent:start', facts);
-				} else if (!bound.agents.has(agentId)) {
-					const existingId = bound.toolUseToAgent.get(event.id);
-					if (existingId && bound.agents.has(existingId)) {
-						/* already started via meta */
-					}
-				}
-			}
-		}
-		if (fromChild) {
-			const nested = mapRecord(rec).filter((e) => e.kind === 'subagent');
-			for (const event of nested) {
-				if (event.kind !== 'subagent') continue;
+			if (event.kind === 'user' && !fromChild) reportPromptTitle(bound, event.text);
+			// A launch seen in a child journal is a nested subagent. One already known by
+			// this id, or through its meta file, has started.
+			if (event.kind === 'subagent') {
 				if (bound.agents.has(event.id) || bound.toolUseToAgent.has(event.id)) continue;
 				const facts: SubagentFacts = {
 					id: event.id,
 					sessionId: bound.session.sessionId,
-					parentId: fromChild,
 					harness: 'ClaudeCode',
 					type: event.type ?? 'Agent',
 					title: event.title,
 					background: event.background === true,
 					status: 'running',
 				};
+				if (fromChild) facts.parentId = fromChild;
 				bound.agents.set(event.id, facts);
 				bound.toolUseToAgent.set(event.id, event.id);
 				ctx.emit('subagent:start', facts);
 			}
 		}
-		const content = (row.message as { content?: unknown } | undefined)?.content ?? row.content;
+		if (!fromChild) reportModel(bound, modelOf(rec));
+		const content = contentOf(row);
 		if (row.type === 'user' && Array.isArray(content)) {
 			for (const part of content) {
 				if (!part || typeof part !== 'object') continue;
@@ -197,18 +215,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 				});
 			}
 		}
-		const text =
-			typeof content === 'string'
-				? content
-				: Array.isArray(content)
-					? content
-							.map((p) =>
-								p && typeof p === 'object' && (p as { type?: string }).type === 'text'
-									? String((p as { text?: string }).text ?? '')
-									: '',
-							)
-							.join('')
-					: undefined;
+		const text = textOf(content);
 		if (row.type === 'user' && text && isTaskNotification(row, text)) {
 			const parsed = parseTaskNotification(text);
 			if (parsed.toolUseId && parsed.status) {
@@ -244,33 +251,40 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		}
 	};
 
+	/**
+	 * Tail a journal. With `seed`, the records already in it set titles, model, subagents
+	 * and activity without being replayed as live events; the tail hands them over
+	 * separately, so the journal is read once.
+	 */
 	const attachJournal = async (
 		bound: Bound,
 		path: string,
-		silent: boolean,
+		seed: boolean,
 		cutoff?: number,
 	): Promise<void> => {
-		if (!ctx) return;
+		if (!ctx || bound.released) return;
 		if (bound.journalPath === path && bound.journalClose) return;
 		bound.pendingJournalClose?.();
 		bound.pendingJournalClose = undefined;
 		bound.journalClose?.();
 		bound.journalPath = path;
-		const records: unknown[] = [];
-		const st = await ctx.fs.stat(path);
-		if (st) {
-			const bytes = await ctx.fs.readRange(path, 0, st.size);
-			for (const line of decodeUtf8(bytes).split('\n')) {
-				if (!line.trim()) continue;
-				try {
-					records.push(JSON.parse(line));
-				} catch {
-					// skip
-				}
+		const tail = ctx.tailJsonl(path, seed ? { backlog: 'separate' } : undefined);
+		bound.journalClose = () => tail.close();
+		if (seed) {
+			let records: unknown[] = [];
+			try {
+				records = await tail.backlog;
+			} catch (error) {
+				if (!bound.released) ctx?.reportError(error);
 			}
-		}
-		if (silent) {
-			for (const rec of records) handleSeedRecord(bound, rec);
+			// Torn down, or moved to another journal, while the backlog was being read.
+			if (!ctx || bound.released || bound.journalPath !== path) return;
+			let model: string | undefined;
+			for (const rec of records) {
+				handleSeedRecord(bound, rec);
+				model = modelOf(rec) ?? model;
+			}
+			reportModel(bound, model);
 			ctx.emit('activity:replay', {
 				id: bound.session.sessionId,
 				facts: collectFacts(
@@ -279,28 +293,14 @@ export function claudeCode(options: PathOptions = {}): Provider {
 				),
 			});
 		}
-		const tail = ctx.tailJsonl(path);
-		bound.journalClose = () => tail.close();
-		void (async () => {
-			let skipping = silent ? records.length : 0;
-			try {
-				for await (const rec of tail) {
-					if (skipping > 0) {
-						skipping--;
-						continue;
-					}
-					handleRecord(bound, rec);
-				}
-			} catch {
-				// closed
-			}
-		})();
+		consume(bound, tail, (rec) => handleRecord(bound, rec));
 		await attachSubagentsDir(bound, path);
 	};
 
 	function handleSeedRecord(bound: Bound, rec: unknown): void {
 		if (!rec || typeof rec !== 'object') return;
 		for (const event of mapRecord(rec)) {
+			if (event.kind === 'user') reportPromptTitle(bound, event.text);
 			if (event.kind === 'title') {
 				ctx?.emit('title', {
 					id: bound.session.sessionId,
@@ -332,7 +332,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 	}
 
 	const attachSubagentsDir = async (bound: Bound, journalPath: string): Promise<void> => {
-		if (!ctx) return;
+		if (!ctx || bound.released) return;
 		bound.subClose?.();
 		const dir = join(subagentsDir(journalPath), 'subagents');
 		const handle = ctx.watchDir(dir, (event) => {
@@ -352,6 +352,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		} catch {
 			return;
 		}
+		if (!ctx || bound.released) return;
 		const name = basename(path);
 		const agentId = name.replace(/^agent-/, '').replace(/\.meta\.json$/, '');
 		const toolUseId = typeof rec.toolUseId === 'string' ? rec.toolUseId : undefined;
@@ -373,21 +374,15 @@ export function claudeCode(options: PathOptions = {}): Provider {
 	};
 
 	const tailChild = async (bound: Bound, path: string, name: string): Promise<void> => {
-		if (!ctx || bound.childCloses.has(name)) return;
+		if (!ctx || bound.released || bound.childCloses.has(name)) return;
 		const agentId = name.replace(/^agent-/, '').replace(/\.jsonl$/, '');
 		const tail = ctx.tailJsonl(path);
 		bound.childCloses.set(name, () => tail.close());
-		void (async () => {
-			try {
-				for await (const rec of tail) handleRecord(bound, rec, agentId);
-			} catch {
-				// closed
-			}
-		})();
+		consume(bound, tail, (rec) => handleRecord(bound, rec, agentId));
 	};
 
 	const armPendingJournal = (bound: Bound, parsed: ParsedSessionFile): void => {
-		if (!ctx || bound.journalPath || !parsed.cwd) return;
+		if (!ctx || bound.released || bound.journalPath || !parsed.cwd) return;
 		bound.pendingJournalClose?.();
 		const derived = derivedJournalPath(homeOf(), parsed.cwd, parsed.sessionId);
 		const dir = dirname(derived);
@@ -412,11 +407,18 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		const byPid = bounds.get(parsed.pid);
 		if (byPid && byPid.session.sessionId !== parsed.sessionId) {
 			emitClose(byPid);
-			teardown(byPid, false);
+			teardown(byPid);
 		}
 		const journal = parsed.cwd
 			? await resolveJournal(ctx.fs, homeOf(), parsed.sessionId, parsed.cwd)
 			: await resolveJournal(ctx.fs, homeOf(), parsed.sessionId);
+		// Unwatched, or this pid bound by a newer event, while the journal was being found.
+		if (!ctx || closed) return;
+		const raced = bounds.get(parsed.pid);
+		if (raced) {
+			await rewrite(raced, parsed);
+			return;
+		}
 		const bound: Bound = {
 			pid: parsed.pid,
 			filePath,
@@ -424,8 +426,8 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			childCloses: new Map(),
 			toolUseToAgent: new Map(),
 			agents: new Map(),
-			stale: false,
-			activity: { openSubagents: 0 },
+			promptTitled: false,
+			released: false,
 		};
 		bounds.set(parsed.pid, bound);
 		const verb = journal ? 'session:open' : 'session:create';
@@ -455,7 +457,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			const current = bounds.get(parsed.pid);
 			if (!current) return;
 			emitClose(current);
-			teardown(current, true);
+			teardown(current);
 		});
 		if (watch === 'unsupported') processWatchUnsupported = true;
 		else bound.processWatch = watch;
@@ -467,7 +469,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		if (!ctx) return;
 		if (parsed.sessionId !== bound.session.sessionId) {
 			emitClose(bound);
-			teardown(bound, false);
+			teardown(bound);
 			await bind(bound.filePath, parsed);
 			return;
 		}
@@ -480,6 +482,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			if (journal) await attachJournal(bound, journal, false);
 			else armPendingJournal(bound, parsed);
 		}
+		if (!ctx || bound.released) return;
 		if (parsed.cwd && parsed.cwd !== prev.cwd) {
 			ctx.emit('session:update', {
 				id: parsed.sessionId,
@@ -490,6 +493,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			if (nextJournal && nextJournal !== bound.journalPath) {
 				await attachJournal(bound, nextJournal, true, parsed.statusUpdatedAt);
 			}
+			if (!ctx || bound.released) return;
 		}
 		const mapped = mapStatus(parsed.status);
 		const prevMapped = mapStatus(prev.status);
@@ -536,14 +540,14 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			const bound = bounds.get(filenamePid);
 			if (bound) {
 				emitClose(bound);
-				teardown(bound, false);
+				teardown(bound);
 			}
 			return;
 		}
 		const info = await ctx.processInfo(filenamePid);
+		if (!ctx || closed) return;
 		const parsed = parseSessionFile(filenamePid, bytes, info);
 		if (!parsed) return;
-		staleFiles.delete(path);
 		await bind(path, parsed);
 	};
 
@@ -552,9 +556,9 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		for (const bound of [...bounds.values()]) {
 			if (pid != null && bound.pid !== pid) continue;
 			const info = await ctx.processInfo(bound.pid);
-			if (!info.alive) {
+			if (!info.alive && !bound.released) {
 				emitClose(bound);
-				teardown(bound, true);
+				teardown(bound);
 			}
 		}
 	};
@@ -575,7 +579,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 					const bound = bounds.get(pid);
 					if (bound) {
 						emitClose(bound);
-						teardown(bound, false);
+						teardown(bound);
 					}
 					return;
 				}
@@ -591,12 +595,12 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			return () => {
 				closed = true;
 				watcher.close();
-				for (const bound of [...bounds.values()]) teardown(bound, false);
+				for (const bound of [...bounds.values()]) teardown(bound);
 				ctx = undefined;
 			};
 		},
 		async revalidate(watchCtx, pid) {
-			ctx = watchCtx;
+			ctx ??= watchCtx;
 			await revalidate(pid);
 		},
 		async *list(listCtx: ListContext) {
