@@ -328,3 +328,80 @@ test('a reply split into records plus turn_duration and idle ends the turn once'
 		await rm(home, { recursive: true, force: true });
 	}
 });
+
+async function bindIdleWithHistory(records: (t: (ms: number) => string) => unknown[]) {
+	const home = await mkdtemp(join(tmpdir(), 'aya-cc-'));
+	const now = Date.now();
+	const start = now - 5000;
+	const procs = fakeProcesses(start);
+	procs.set(8, true, start);
+	const t = (ms: number) => new Date(start + ms).toISOString();
+	let aya: ReturnType<typeof AllYourAgents> | undefined;
+	try {
+		await journal(home, '/tmp/app', ID_A, records(t));
+		// Went idle after every record above.
+		await sessionFile(
+			home,
+			8,
+			{ sessionId: ID_A, cwd: '/tmp/app', status: 'idle', statusUpdatedAt: now - 100 },
+			start,
+		);
+		aya = AllYourAgents({ providers: [claudeCode({ home })], processes: procs });
+		await aya.start();
+		return aya.running()[0]?.activity;
+	} finally {
+		await aya?.stop();
+		await rm(home, { recursive: true, force: true });
+	}
+}
+
+const toolTurn = (t: (ms: number) => string, id: string) => [
+	{ type: 'user', sessionId: ID_A, timestamp: t(0), message: { content: 'search' } },
+	{
+		type: 'assistant',
+		sessionId: ID_A,
+		timestamp: t(10),
+		message: {
+			id: `${id}-a`,
+			stop_reason: 'tool_use',
+			content: [{ type: 'tool_use', id: `${id}-tool`, name: 'WebSearch', input: {} }],
+		},
+	},
+	{
+		type: 'user',
+		sessionId: ID_A,
+		timestamp: t(20),
+		message: { content: [{ type: 'tool_result', tool_use_id: `${id}-tool`, content: 'ok' }] },
+	},
+	{
+		type: 'assistant',
+		sessionId: ID_A,
+		timestamp: t(30),
+		message: { id: `${id}-b`, stop_reason: 'end_turn', content: [{ type: 'thinking' }] },
+	},
+	{
+		type: 'assistant',
+		sessionId: ID_A,
+		timestamp: t(31),
+		message: { id: `${id}-b`, stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }] },
+	},
+	{ type: 'system', subtype: 'turn_duration', sessionId: ID_A, timestamp: t(40) },
+];
+
+test('bind replay: finished turns before going idle stay completed', async () => {
+	const activity = await bindIdleWithHistory((t) => [
+		...toolTurn(t, 'one'),
+		...toolTurn((ms) => t(1000 + ms), 'two'),
+	]);
+	assert.equal(activity?.lastTurn, 'completed');
+	assert.equal(activity?.tool, undefined);
+});
+
+test('bind replay: a tool still open when the session went idle is interrupted', async () => {
+	const activity = await bindIdleWithHistory((t) => [
+		...toolTurn(t, 'one'),
+		...toolTurn((ms) => t(1000 + ms), 'two').slice(0, 2),
+	]);
+	assert.equal(activity?.lastTurn, 'interrupted');
+	assert.equal(activity?.tool, undefined);
+});

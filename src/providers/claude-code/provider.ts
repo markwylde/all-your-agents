@@ -79,26 +79,47 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		if (markStale) staleFiles.add(bound.filePath);
 	};
 
+	/**
+	 * Turn facts for a bind replay. Records at or before `cutoff` (when the session file
+	 * last went idle) must not leave a turn or tool open, so a turn still open when the
+	 * replay passes the cutoff is closed there, once. Closing after every start instead
+	 * would record a synthetic end before the turn's real end, and the core keeps the
+	 * first end of a turn.
+	 */
 	function collectFacts(records: unknown[], cutoff?: number): TurnFact[] {
 		const facts: TurnFact[] = [];
 		let openTool = false;
+		let openTurn = false;
+		let pastCutoff = cutoff == null;
+		const closeOpen = (at: number | undefined): void => {
+			if (!openTool && !openTurn) return;
+			facts.push(closeOpenTurn(openTool, at));
+			openTool = false;
+			openTurn = false;
+		};
 		for (const rec of records) {
 			const at =
 				rec && typeof rec === 'object' ? recordTime(rec as Record<string, unknown>) : undefined;
-			const skipOpen = cutoff != null && at != null && at <= cutoff;
+			if (!pastCutoff && cutoff != null && at != null && at > cutoff) {
+				closeOpen(cutoff);
+				pastCutoff = true;
+			}
 			for (const fact of turnFactsFromRecord(rec)) {
-				if (skipOpen && (fact.type === 'tool-started' || fact.type === 'turn-started')) {
-					facts.push(fact);
-					facts.push(closeOpenTurn(true, at));
-					openTool = false;
-					continue;
-				}
 				facts.push(fact);
-				if (fact.type === 'tool-started') openTool = true;
-				if (fact.type === 'tool-finished' || fact.type === 'turn-ended') openTool = false;
+				if (fact.type === 'turn-started') openTurn = true;
+				if (fact.type === 'tool-started') {
+					openTool = true;
+					openTurn = true;
+				}
+				if (fact.type === 'tool-finished') openTool = false;
+				if (fact.type === 'turn-ended') {
+					openTool = false;
+					openTurn = false;
+				}
 			}
 		}
-		if (cutoff != null && openTool) facts.push(closeOpenTurn(true, cutoff));
+		if (!pastCutoff) closeOpen(cutoff);
+		else if (cutoff != null && openTool) facts.push(closeOpenTurn(true, cutoff));
 		return facts;
 	}
 
