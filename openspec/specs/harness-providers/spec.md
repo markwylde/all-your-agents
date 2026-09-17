@@ -95,11 +95,15 @@ All file access in providers SHALL go through the `WatchContext`/`ListContext`/`
 The package SHALL provide helpers that providers use instead of writing their own watchers.
 - `watchDir(path, onChange, { quietMs, maxLatencyMs })`: performs an initial scan, reports create/change/delete per entry, decides create/delete by existence after the burst rather than by event type, and coalesces bursts per entry.
 - `watchFile(path, onChange, { quietMs, maxLatencyMs })`
-- `tailJsonl(path)`: yields complete JSON lines from a byte offset, then appended lines, reading only on notification.
+- `tailJsonl(path, { backlog? })`: yields complete JSON lines from a byte offset, then appended lines, reading only on notification.
 - `processInfo(pid)`: one-time `{ alive, startTime? }` probe.
 - `watchProcess(pid, onExit)`: process exit notification, or `unsupported`.
 
-When a watched directory does not exist, `watchDir` SHALL watch the nearest existing ancestor and begin watching once the directory appears, re-arming one level at a time.
+When a watched directory does not exist, `watchDir` SHALL watch the nearest existing ancestor and begin watching once the directory appears, re-arming one level at a time. `watchDir` SHALL open its watch before it performs the initial scan, so an entry created while the scan runs is reported, and SHALL report each entry's creation once. When the watched directory is removed, `watchDir` SHALL report a delete for every entry it knew and re-arm as for a missing directory.
+
+`tailJsonl` SHALL read each byte of the file once. With `backlog: 'separate'`, the complete records present when the tail opens SHALL be delivered together through the handle's `backlog` promise and SHALL NOT be yielded by iteration, which then yields only later appends; this lets a caller tell stored records from live ones without reading the file twice. `tailJsonl` SHALL decode UTF-8 across read boundaries, so a multi-byte character split between two reads is yielded intact. When reading the tailed file fails, iteration SHALL end by throwing that error, so the caller can report it; it SHALL NOT surface as an unhandled rejection.
+
+A helper SHALL NOT open a watch after it has been closed, whatever it was awaiting at the time.
 
 #### Scenario: Directory created later
 - **WHEN** `watchDir` is called on a missing directory and that directory is then created with a file inside
@@ -112,6 +116,34 @@ When a watched directory does not exist, `watchDir` SHALL watch the nearest exis
 #### Scenario: Truncated journal
 - **WHEN** a tailed JSONL file shrinks
 - **THEN** `tailJsonl` restarts from offset zero instead of yielding corrupt lines
+
+#### Scenario: Entry created during the initial scan
+- **WHEN** an entry is created in a watched directory after the watch is open and before the initial scan has listed it
+- **THEN** exactly one create is reported for it
+
+#### Scenario: Directory removed and created again
+- **WHEN** a watched directory holding one entry is removed, then created again with a new entry
+- **THEN** a delete is reported for the old entry and a create for the new one, without polling
+
+#### Scenario: Backlog delivered separately
+- **WHEN** a file holding two records is tailed with `backlog: 'separate'` and a third record is then appended
+- **THEN** `backlog` resolves with the first two records, iteration yields only the third, and the first two were read from disk once
+
+#### Scenario: Two levels missing
+- **WHEN** `watchDir` is called on `<home>/sessions` while `<home>` does not exist, then `<home>` is created with another file in it, then `<home>/sessions` with an entry
+- **THEN** the only change reported is the create of that entry in `<home>/sessions`
+
+#### Scenario: Closed while starting
+- **WHEN** `watchDir` is closed while its initial scan, or its walk up to an existing ancestor, is still in progress
+- **THEN** no watch is left open and no change is reported
+
+#### Scenario: Read failure
+- **WHEN** reading a tailed file fails
+- **THEN** iteration ends by throwing that error
+
+#### Scenario: Character split across reads
+- **WHEN** a line containing a multi-byte character is written in two parts that split that character, with a read between them
+- **THEN** the record is yielded once, complete, with the character intact
 
 ### Requirement: Normalized session events
 Providers SHALL map harness records into these normalized kinds:
@@ -178,3 +210,10 @@ The package SHALL export a conformance kit that runs the lifecycle contract agai
 #### Scenario: In-memory provider passes
 - **WHEN** the conformance kit runs against a minimal in-memory test provider
 - **THEN** every conformance case passes, proving the kit has no harness assumptions
+
+### Requirement: Asynchronous failure reporting
+The `WatchContext` SHALL expose `reportError(error)`. A provider SHALL use it for any failure that happens after `watch` has returned (for example while handling a tailed record) instead of throwing into a callback or discarding the error. The core SHALL emit each report as an `error` event naming that provider. A provider SHALL keep observing after it reports: one record that cannot be handled SHALL NOT end the tail it came from.
+
+#### Scenario: Bad record does not end the tail
+- **WHEN** handling one tailed record fails and further records are then appended
+- **THEN** one `error` is emitted naming the provider, and the later records still produce their events
