@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { platform } from 'node:os';
 import { promisify } from 'node:util';
 import { Worker } from 'node:worker_threads';
-import type { Processes, ProcessInfo, ProcessWatchResult } from './types.js';
+import type { Processes, ProcessInfo, ProcessWatchResult } from './types.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -48,7 +48,9 @@ export function createLocalProcesses(
 	const spawn = (): WorkerHandle | undefined => {
 		let worker: Worker;
 		try {
-			worker = new Worker(new URL('./process-watch-worker.js', import.meta.url));
+			// Run from source (`node file.ts`) the worker is a .ts file; built, it is .js.
+			const ext = import.meta.url.endsWith('.ts') ? 'ts' : 'js';
+			worker = new Worker(new URL(`./process-watch-worker.${ext}`, import.meta.url));
 		} catch {
 			return undefined;
 		}

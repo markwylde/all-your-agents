@@ -1,4 +1,4 @@
-import type { SessionStatus } from '../../types.js';
+import type { SessionStatus } from '../../types.ts';
 
 export function mapStatus(word: unknown): { status?: SessionStatus; waitingFor?: string } {
 	if (word === 'busy') return { status: 'running' };

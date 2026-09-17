@@ -5,7 +5,7 @@ import type {
 	Fs,
 	Processes,
 	ProcessInfo,
-} from './helpers/types.js';
+} from './helpers/types.ts';
 import type {
 	Harness,
 	SessionEvent,
@@ -16,7 +16,7 @@ import type {
 	SubagentStatus,
 	TitleSource,
 	TurnFact,
-} from './types.js';
+} from './types.ts';
 
 export type SessionInput = {
 	id: string;

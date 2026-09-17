@@ -1,10 +1,10 @@
 import { basename, dirname, join } from 'node:path';
-import { decodeUtf8 } from '../../helpers/bytes.js';
-import { tailJsonl } from '../../helpers/tail-jsonl.js';
-import type { ProcessWatchHandle } from '../../helpers/types.js';
-import type { InspectContext, ListContext, Provider, WatchContext } from '../../provider.js';
-import type { SessionActivity, SessionEvent, SubagentFacts, TurnFact } from '../../types.js';
-import { closeOpenTurn, turnFactsFromRecord } from './activity.js';
+import { decodeUtf8 } from '../../helpers/bytes.ts';
+import { tailJsonl } from '../../helpers/tail-jsonl.ts';
+import type { ProcessWatchHandle } from '../../helpers/types.ts';
+import type { InspectContext, ListContext, Provider, WatchContext } from '../../provider.ts';
+import type { SessionActivity, SessionEvent, SubagentFacts, TurnFact } from '../../types.ts';
+import { closeOpenTurn, turnFactsFromRecord } from './activity.ts';
 import {
 	isTaskNotification,
 	mapRecord,
@@ -12,21 +12,21 @@ import {
 	recordTime,
 	resolveJournal,
 	toolResultText,
-} from './journal.js';
-import { listSessions } from './list.js';
+} from './journal.ts';
+import { listSessions } from './list.ts';
 import {
 	claudeHome,
 	derivedJournalPath,
 	type PathOptions,
 	sessionsDir,
 	subagentsDir,
-} from './paths.js';
+} from './paths.ts';
 import {
 	type ParsedSessionFile,
 	parseSessionFile,
 	SESSION_FILE_MAX_BYTES,
-} from './session-file.js';
-import { isIdleWord, mapStatus } from './status.js';
+} from './session-file.ts';
+import { isIdleWord, mapStatus } from './status.ts';
 
 type Bound = {
 	pid: number;

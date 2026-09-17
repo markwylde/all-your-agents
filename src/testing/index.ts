@@ -1,4 +1,4 @@
-export { createClaudeFixtureDriver } from './claude-driver.js';
-export type { FixtureDriver } from './driver.js';
-export { defineConformanceTests } from './kit.js';
-export { createMemoryHarness } from './memory.js';
+export { createClaudeFixtureDriver } from './claude-driver.ts';
+export type { FixtureDriver } from './driver.ts';
+export { defineConformanceTests } from './kit.ts';
+export { createMemoryHarness } from './memory.ts';

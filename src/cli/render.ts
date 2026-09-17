@@ -1,7 +1,7 @@
-import { fit, type Style, sanitize, style, truncate, width } from './ansi.js';
-import { clockTime, folder, longTime, shortTime, statusText, subCount, value } from './format.js';
-import { liveCounts, visibleRows } from './rows.js';
-import { bodyHeight, type Row, type SortKey, type ViewState } from './state.js';
+import { fit, type Style, sanitize, style, truncate, width } from './ansi.ts';
+import { clockTime, folder, longTime, shortTime, statusText, subCount, value } from './format.ts';
+import { liveCounts, visibleRows } from './rows.ts';
+import { bodyHeight, type Row, type SortKey, type ViewState } from './state.ts';
 
 export type RenderOptions = {
 	now: number;

@@ -1,7 +1,7 @@
-import type { AllYourAgents as Instance } from './core/instance.js';
-import { createAllYourAgents } from './core/instance.js';
-import type { InstanceOptions } from './provider.js';
-import { claudeCode } from './providers/claude-code/index.js';
+import type { AllYourAgents as Instance } from './core/instance.ts';
+import { createAllYourAgents } from './core/instance.ts';
+import type { InstanceOptions } from './provider.ts';
+import { claudeCode } from './providers/claude-code/index.ts';
 
 export const builtInProviders = [claudeCode()];
 
@@ -16,9 +16,9 @@ export { claudeCode };
 
 export default AllYourAgents;
 
-export { emptyActivity, reduceActivity } from './core/activity.js';
-export type { AllYourAgents as AllYourAgentsInstance } from './core/instance.js';
-export { groupTurns } from './core/turns.js';
+export { emptyActivity, reduceActivity } from './core/activity.ts';
+export type { AllYourAgents as AllYourAgentsInstance } from './core/instance.ts';
+export { groupTurns } from './core/turns.ts';
 export {
 	coalesce,
 	createLocalFs,
@@ -26,8 +26,8 @@ export {
 	tailJsonl,
 	watchDir,
 	watchFile,
-} from './helpers/index.js';
-export type { Clock, DebounceOptions, Fs, Processes } from './helpers/types.js';
+} from './helpers/index.ts';
+export type { Clock, DebounceOptions, Fs, Processes } from './helpers/types.ts';
 export type {
 	InspectContext,
 	InstanceOptions,
@@ -36,7 +36,7 @@ export type {
 	SessionInput,
 	Unwatch,
 	WatchContext,
-} from './provider.js';
+} from './provider.ts';
 export type {
 	EventMeta,
 	Harness,
@@ -55,4 +55,4 @@ export type {
 	Turn,
 	TurnFact,
 	TurnOutcome,
-} from './types.js';
+} from './types.ts';

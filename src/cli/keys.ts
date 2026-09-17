@@ -1,4 +1,4 @@
-import type { Key } from './state.js';
+import type { Key } from './state.ts';
 
 export type ReadlineKey = {
 	name?: string;

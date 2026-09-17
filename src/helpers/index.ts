@@ -1,10 +1,10 @@
-export { decodeUtf8, encodeUtf8, TooLargeError } from './bytes.js';
-export { FakeClock, systemClock } from './clock.js';
-export { coalesce } from './coalesce.js';
-export { createLocalFs, isEnoent } from './fs.js';
-export { installTimerGuard } from './no-timers.js';
-export { createLocalProcesses, koffiAvailable, parseLstart } from './processes.js';
-export { tailJsonl } from './tail-jsonl.js';
+export { decodeUtf8, encodeUtf8, TooLargeError } from './bytes.ts';
+export { FakeClock, systemClock } from './clock.ts';
+export { coalesce } from './coalesce.ts';
+export { createLocalFs, isEnoent } from './fs.ts';
+export { installTimerGuard } from './no-timers.ts';
+export { createLocalProcesses, koffiAvailable, parseLstart } from './processes.ts';
+export { tailJsonl } from './tail-jsonl.ts';
 export type {
 	Clock,
 	DebounceOptions,
@@ -18,6 +18,6 @@ export type {
 	ProcessWatchHandle,
 	ProcessWatchResult,
 	WatchHandle,
-} from './types.js';
-export { watchDir } from './watch-dir.js';
-export { watchFile } from './watch-file.js';
+} from './types.ts';
+export { watchDir } from './watch-dir.ts';
+export { watchFile } from './watch-file.ts';

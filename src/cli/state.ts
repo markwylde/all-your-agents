@@ -5,8 +5,8 @@ import type {
 	SessionStatus,
 	Subagent,
 	SubagentStatus,
-} from '../index.js';
-import { visibleRows } from './rows.js';
+} from '../index.ts';
+import { visibleRows } from './rows.ts';
 
 export type SubRow = {
 	id: string;

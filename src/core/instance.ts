@@ -1,10 +1,10 @@
-import { systemClock } from '../helpers/clock.js';
-import { createLocalFs } from '../helpers/fs.js';
-import { createLocalProcesses } from '../helpers/processes.js';
-import { tailJsonl } from '../helpers/tail-jsonl.js';
-import type { Processes } from '../helpers/types.js';
-import { watchDir } from '../helpers/watch-dir.js';
-import { watchFile } from '../helpers/watch-file.js';
+import { systemClock } from '../helpers/clock.ts';
+import { createLocalFs } from '../helpers/fs.ts';
+import { createLocalProcesses } from '../helpers/processes.ts';
+import { tailJsonl } from '../helpers/tail-jsonl.ts';
+import type { Processes } from '../helpers/types.ts';
+import { watchDir } from '../helpers/watch-dir.ts';
+import { watchFile } from '../helpers/watch-file.ts';
 import type {
 	InspectContext,
 	InstanceOptions,
@@ -14,7 +14,7 @@ import type {
 	SessionInput,
 	Unwatch,
 	WatchContext,
-} from '../provider.js';
+} from '../provider.ts';
 import type {
 	EventMeta,
 	ProviderError,
@@ -31,9 +31,9 @@ import type {
 	TitleSource,
 	Turn,
 	TurnFact,
-} from '../types.js';
-import { activityChanged, emptyActivity, reduceActivity, withOpenSubagents } from './activity.js';
-import { groupTurns } from './turns.js';
+} from '../types.ts';
+import { activityChanged, emptyActivity, reduceActivity, withOpenSubagents } from './activity.ts';
+import { groupTurns } from './turns.ts';
 
 const TITLE_ORDER: TitleSource[] = ['user', 'harness', 'process', 'prompt'];
 

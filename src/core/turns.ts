@@ -1,4 +1,4 @@
-import type { SessionEvent, Turn, TurnOutcome } from '../types.js';
+import type { SessionEvent, Turn, TurnOutcome } from '../types.ts';
 
 export function groupTurns(events: SessionEvent[]): Turn[] {
 	const turns: Turn[] = [];

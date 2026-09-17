@@ -1,5 +1,5 @@
-import { sanitize } from './ansi.js';
-import type { Row } from './state.js';
+import { sanitize } from './ansi.ts';
+import type { Row } from './state.ts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

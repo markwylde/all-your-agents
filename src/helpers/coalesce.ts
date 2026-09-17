@@ -1,5 +1,5 @@
-import { systemClock } from './clock.js';
-import type { Clock } from './types.js';
+import { systemClock } from './clock.ts';
+import type { Clock } from './types.ts';
 
 export type Coalescer = {
 	notify(path: string, service: () => void): void;

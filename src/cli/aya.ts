@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import { AllYourAgents } from '../index.js';
-import { run } from './run.js';
+import { AllYourAgents } from '../index.ts';
+import { run } from './run.ts';
 
 function readVersion(): string {
 	try {

@@ -1,4 +1,4 @@
-import type { Clock } from './types.js';
+import type { Clock } from './types.ts';
 
 export const systemClock: Clock = {
 	now: () => Date.now(),

@@ -1,7 +1,7 @@
 import { watch as fsWatch } from 'node:fs';
 import { open, readdir, readFile, stat } from 'node:fs/promises';
-import { TooLargeError } from './bytes.js';
-import type { Fs, FsStat, FsWatchEvent, WatchHandle } from './types.js';
+import { TooLargeError } from './bytes.ts';
+import type { Fs, FsStat, FsWatchEvent, WatchHandle } from './types.ts';
 
 function toStat(st: {
 	size: number;

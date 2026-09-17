@@ -1,7 +1,7 @@
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { encodeProjectDir } from '../providers/claude-code/paths.js';
-import type { FixtureDriver } from './driver.js';
+import { encodeProjectDir } from '../providers/claude-code/paths.ts';
+import type { FixtureDriver } from './driver.ts';
 
 export function createClaudeFixtureDriver(home: string, start = Date.now() - 200): FixtureDriver {
 	const pids = new Map<string, number>();

@@ -1,11 +1,11 @@
-import type { TurnFact } from '../../types.js';
+import type { TurnFact } from '../../types.ts';
 import {
 	isInjectedText,
 	isInterruption,
 	isTaskNotification,
 	recordTime,
 	toolResultText,
-} from './journal.js';
+} from './journal.ts';
 
 function contentOf(rec: Record<string, unknown>): unknown {
 	const message = rec.message;

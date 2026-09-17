@@ -1,10 +1,10 @@
 import { join } from 'node:path';
-import { decodeUtf8 } from '../../helpers/bytes.js';
-import type { Fs } from '../../helpers/types.js';
-import type { SessionKind, SessionSnapshot, TitleSource } from '../../types.js';
-import { mapRecord, recordTime } from './journal.js';
-import { projectsDir } from './paths.js';
-import { mapKind } from './session-file.js';
+import { decodeUtf8 } from '../../helpers/bytes.ts';
+import type { Fs } from '../../helpers/types.ts';
+import type { SessionKind, SessionSnapshot, TitleSource } from '../../types.ts';
+import { mapRecord, recordTime } from './journal.ts';
+import { projectsDir } from './paths.ts';
+import { mapKind } from './session-file.ts';
 
 const TAIL_BYTES = 64 * 1024;
 

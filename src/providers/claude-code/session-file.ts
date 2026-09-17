@@ -1,5 +1,5 @@
-import type { ProcessInfo } from '../../helpers/types.js';
-import type { SessionKind } from '../../types.js';
+import type { ProcessInfo } from '../../helpers/types.ts';
+import type { SessionKind } from '../../types.ts';
 
 export const SESSION_FILE_MAX_BYTES = 64 * 1024;
 export const START_TIME_TOLERANCE_MS = 5000;

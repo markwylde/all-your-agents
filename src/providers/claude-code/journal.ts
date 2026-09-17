@@ -1,8 +1,8 @@
 import { join } from 'node:path';
-import { decodeUtf8 } from '../../helpers/bytes.js';
-import type { Fs } from '../../helpers/types.js';
-import type { SessionEvent, SubagentStatus } from '../../types.js';
-import { derivedJournalPath, projectsDir } from './paths.js';
+import { decodeUtf8 } from '../../helpers/bytes.ts';
+import type { Fs } from '../../helpers/types.ts';
+import type { SessionEvent, SubagentStatus } from '../../types.ts';
+import { derivedJournalPath, projectsDir } from './paths.ts';
 
 const UNMAPPED = new Set([
 	'queue-operation',

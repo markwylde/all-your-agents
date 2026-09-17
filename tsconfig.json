@@ -14,7 +14,9 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "noUncheckedIndexedAccess": true,
-    "noEmitOnError": true
+    "noEmitOnError": true,
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true
   },
   "include": ["src"]
 }

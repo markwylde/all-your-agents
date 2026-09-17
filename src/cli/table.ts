@@ -1,6 +1,6 @@
-import type { Session } from '../index.js';
-import { fit, style, truncate, width } from './ansi.js';
-import { folder, shortTime, value } from './format.js';
+import type { Session } from '../index.ts';
+import { fit, style, truncate, width } from './ansi.ts';
+import { folder, shortTime, value } from './format.ts';
 
 type Cell = (s: Session, now: number, home?: string) => string;
 

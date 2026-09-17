@@ -1,8 +1,8 @@
 import { basename, dirname, join } from 'node:path';
-import { systemClock } from './clock.js';
-import type { Coalescer } from './coalesce.js';
-import { coalesce } from './coalesce.js';
-import type { DebounceOptions, DirChange, Fs, FsStat } from './types.js';
+import { systemClock } from './clock.ts';
+import type { Coalescer } from './coalesce.ts';
+import { coalesce } from './coalesce.ts';
+import type { DebounceOptions, DirChange, Fs, FsStat } from './types.ts';
 
 export type WatchDirHandle = {
 	close(): void;

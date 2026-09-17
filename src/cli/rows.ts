@@ -1,4 +1,4 @@
-import type { Row, ViewState } from './state.js';
+import type { Row, ViewState } from './state.ts';
 
 const STATUS_RANK: Record<string, number> = { waiting: 0, running: 1, idle: 2 };
 

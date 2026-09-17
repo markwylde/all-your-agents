@@ -1,8 +1,8 @@
 import { basename, dirname } from 'node:path';
-import { decodeUtf8 } from './bytes.js';
-import { systemClock } from './clock.js';
-import { coalesce } from './coalesce.js';
-import type { DebounceOptions, Fs, WatchHandle } from './types.js';
+import { decodeUtf8 } from './bytes.ts';
+import { systemClock } from './clock.ts';
+import { coalesce } from './coalesce.ts';
+import type { DebounceOptions, Fs, WatchHandle } from './types.ts';
 
 export type TailJsonlHandle = AsyncIterable<unknown> & {
 	close(): void;

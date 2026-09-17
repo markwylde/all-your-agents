@@ -1,7 +1,7 @@
 import { basename, dirname } from 'node:path';
-import { systemClock } from './clock.js';
-import { coalesce } from './coalesce.js';
-import type { DebounceOptions, FileChange, Fs, WatchHandle } from './types.js';
+import { systemClock } from './clock.ts';
+import { coalesce } from './coalesce.ts';
+import type { DebounceOptions, FileChange, Fs, WatchHandle } from './types.ts';
 
 export type WatchFileHandle = {
 	close(): void;

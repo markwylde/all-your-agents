@@ -1,11 +1,11 @@
 import { emitKeypressEvents } from 'node:readline';
-import type { AllYourAgentsInstance, Session, Subagent } from '../index.js';
-import { CLEAR_LINE_END, CLEAR_SCREEN_END, ENTER_SCREEN, HOME, LEAVE_SCREEN } from './ansi.js';
-import { parseArgs, USAGE } from './args.js';
-import { type ReadlineKey, toKey } from './keys.js';
-import { renderLines } from './render.js';
-import { applyEvent, applyKey, initialState, type ViewEvent, type ViewState } from './state.js';
-import { formatJson, formatTable } from './table.js';
+import type { AllYourAgentsInstance, Session, Subagent } from '../index.ts';
+import { CLEAR_LINE_END, CLEAR_SCREEN_END, ENTER_SCREEN, HOME, LEAVE_SCREEN } from './ansi.ts';
+import { parseArgs, USAGE } from './args.ts';
+import { type ReadlineKey, toKey } from './keys.ts';
+import { renderLines } from './render.ts';
+import { applyEvent, applyKey, initialState, type ViewEvent, type ViewState } from './state.ts';
+import { formatJson, formatTable } from './table.ts';
 
 // biome-ignore lint/suspicious/noExplicitAny: must accept Node emitter listeners
 type Listener = (...args: any[]) => void;

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { installTimerGuard } from '../helpers/no-timers.js';
-import type { Processes } from '../helpers/types.js';
-import { AllYourAgents } from '../index.js';
-import type { Provider } from '../provider.js';
-import type { FixtureDriver } from './driver.js';
+import { installTimerGuard } from '../helpers/no-timers.ts';
+import type { Processes } from '../helpers/types.ts';
+import { AllYourAgents } from '../index.ts';
+import type { Provider } from '../provider.ts';
+import type { FixtureDriver } from './driver.ts';
 
 export type ConformanceOptions = {
 	name: string;

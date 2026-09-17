@@ -1,4 +1,4 @@
-import type { SessionActivity, TurnFact } from '../types.js';
+import type { SessionActivity, TurnFact } from '../types.ts';
 
 export function emptyActivity(): SessionActivity {
 	return { openSubagents: 0 };

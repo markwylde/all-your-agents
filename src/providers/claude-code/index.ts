@@ -1,5 +1,5 @@
-export { mapRecord, resolveJournal } from './journal.js';
-export { claudeHome, derivedJournalPath, encodeProjectDir } from './paths.js';
-export { claudeCode } from './provider.js';
-export { allowedSessionFields, parseSessionFile } from './session-file.js';
-export { mapStatus } from './status.js';
+export { mapRecord, resolveJournal } from './journal.ts';
+export { claudeHome, derivedJournalPath, encodeProjectDir } from './paths.ts';
+export { claudeCode } from './provider.ts';
+export { allowedSessionFields, parseSessionFile } from './session-file.ts';
+export { mapStatus } from './status.ts';

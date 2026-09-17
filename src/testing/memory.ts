@@ -1,6 +1,6 @@
-import type { Provider, SessionInput, WatchContext } from '../provider.js';
-import type { SessionEvent, SessionSnapshot, SubagentFacts } from '../types.js';
-import type { FixtureDriver } from './driver.js';
+import type { Provider, SessionInput, WatchContext } from '../provider.ts';
+import type { SessionEvent, SessionSnapshot, SubagentFacts } from '../types.ts';
+import type { FixtureDriver } from './driver.ts';
 
 export function createMemoryHarness(): {
 	provider: Provider;

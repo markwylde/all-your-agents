@@ -16,12 +16,12 @@ const processes = {
 
 class FakeOut extends EventEmitter {
 	chunks: string[] = [];
-	constructor(
-		public isTTY: boolean,
-		public columns = 120,
-		public rows = 20,
-	) {
+	isTTY: boolean;
+	columns = 120;
+	rows = 20;
+	constructor(isTTY: boolean) {
 		super();
+		this.isTTY = isTTY;
 	}
 	write(chunk: string, cb?: () => void) {
 		this.chunks.push(chunk);
