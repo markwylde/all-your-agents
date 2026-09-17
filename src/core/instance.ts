@@ -53,6 +53,8 @@ type LiveEntry = {
 	kind?: SessionKind;
 	model?: string;
 	activity: SessionActivity;
+	/** The current turn has ended; further turn ends are the same turn, reported again. */
+	turnEnded: boolean;
 	opened: boolean;
 };
 
@@ -187,6 +189,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			harness: input.harness,
 			provider: input.provider,
 			activity: emptyActivity(),
+			turnEnded: false,
 			opened: true,
 		};
 		if (input.pid != null) entry.pid = input.pid;
@@ -251,7 +254,21 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		emit('session:close', attachSession(entry), meta());
 	};
 
+	/**
+	 * Harnesses often record one turn end several times (Claude Code: every record of
+	 * a split reply, then turn_duration, then going idle). The first end wins until a
+	 * turn or tool call starts again. Returns false when the fact is such a repeat.
+	 */
+	const trackTurnEnd = (entry: { turnEnded: boolean }, fact: TurnFact): boolean => {
+		if (fact.type === 'turn-started' || fact.type === 'tool-started') entry.turnEnded = false;
+		if (fact.type !== 'turn-ended') return true;
+		if (entry.turnEnded) return false;
+		entry.turnEnded = true;
+		return true;
+	};
+
 	const applyTurn = (entry: LiveEntry, fact: TurnFact, silent: boolean): void => {
+		if (!trackTurnEnd(entry, fact)) return;
 		const next = reduceActivity(entry.activity, fact);
 		next.openSubagents = countOpen(entry.id);
 		if (!activityChanged(entry.activity, next)) {
@@ -330,7 +347,11 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			if (!entry) return;
 			let current = emptyActivity();
 			current.openSubagents = countOpen(p.id);
-			for (const fact of p.facts) current = reduceActivity(current, fact);
+			const replayed = { turnEnded: false };
+			for (const fact of p.facts) {
+				if (trackTurnEnd(replayed, fact)) current = reduceActivity(current, fact);
+			}
+			entry.turnEnded = replayed.turnEnded;
 			current.openSubagents = countOpen(p.id);
 			if (activityChanged(entry.activity, current)) {
 				entry.activity = current;

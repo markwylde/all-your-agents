@@ -89,6 +89,8 @@ Every session SHALL have an `activity` object describing what its current or las
 
 `session:activity` SHALL fire whenever any of these fields changes. A turn failure SHALL stay on `activity.error` until the next turn starts. Activity is derived from the transcript. It SHALL NOT change `status`, which comes only from the harness's own status source.
 
+A turn ends once. After a turn has ended, further turn-end facts SHALL be ignored until a turn or a tool call starts: they SHALL NOT change `lastTurn`, `lastTurnEndedAt`, or `error`, and SHALL NOT fire `session:activity`.
+
 #### Scenario: Done is idle plus a completed turn
 - **WHEN** a session's status becomes `idle` after a turn whose last record is a normal turn end
 - **THEN** `activity.lastTurn` is `completed` and `activity.tool` is absent
@@ -108,6 +110,14 @@ Every session SHALL have an `activity` object describing what its current or las
 #### Scenario: Activity never overrides status
 - **WHEN** the transcript shows an unfinished tool call but the harness reports `idle`
 - **THEN** `status` is `idle`, and `activity.tool` is cleared with `lastTurn` set to `interrupted`
+
+#### Scenario: One turn ended several times
+- **WHEN** a finished turn is recorded as several turn ends (a reply split into records that each end the turn, then a turn-duration record, then the session going idle)
+- **THEN** `session:activity` fires once for the end, and `lastTurn` and `lastTurnEndedAt` come from the first end
+
+#### Scenario: A new turn can end again
+- **WHEN** a turn has ended and a new turn or tool call then starts and ends
+- **THEN** that later end updates `lastTurn` and `lastTurnEndedAt` and fires `session:activity`
 
 ### Requirement: Subagents
 A session SHALL expose the subagents it launched as `Subagent` objects, each with:

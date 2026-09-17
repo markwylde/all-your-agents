@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -232,6 +232,99 @@ test('print-mode journal is headless history only', async () => {
 		assert.equal(listed[0]?.kind, 'headless');
 		await aya.stop();
 	} finally {
+		await rm(home, { recursive: true, force: true });
+	}
+});
+
+test('a reply split into records plus turn_duration and idle ends the turn once', async () => {
+	const home = await mkdtemp(join(tmpdir(), 'aya-cc-'));
+	const start = Date.now() - 500;
+	const procs = fakeProcesses(start);
+	procs.set(7, true, start);
+	const cwd = '/tmp/app';
+	const path = join(home, 'projects', encodeProjectDir(cwd), `${ID_A}.jsonl`);
+	const at = (ms: number) => new Date(Date.now() + ms).toISOString();
+	const append = (records: unknown[]) =>
+		appendFile(path, `${records.map((r) => JSON.stringify(r)).join('\n')}\n`);
+	let aya: ReturnType<typeof AllYourAgents> | undefined;
+	try {
+		await journal(home, cwd, ID_A, [
+			{ type: 'user', sessionId: ID_A, timestamp: at(-400), message: { content: 'hi' } },
+			{
+				type: 'assistant',
+				sessionId: ID_A,
+				timestamp: at(-300),
+				message: { id: 'm0', stop_reason: 'end_turn', content: [{ type: 'text', text: 'hello' }] },
+			},
+			{ type: 'system', subtype: 'turn_duration', sessionId: ID_A, timestamp: at(-200) },
+		]);
+		await sessionFile(home, 7, { sessionId: ID_A, cwd, status: 'idle' }, start);
+		aya = AllYourAgents({
+			providers: [claudeCode({ home })],
+			processes: procs,
+			debounce: { quietMs: 5, maxLatencyMs: 50 },
+		});
+		const running = aya;
+		const ends: string[] = [];
+		const tools: string[] = [];
+		aya.on('session:activity', (s, meta) => {
+			if (meta.catchUp) return;
+			if (s.activity.tool) tools.push(s.activity.tool.name);
+			else if (s.activity.lastTurn)
+				ends.push(`${s.activity.lastTurn}@${s.activity.lastTurnEndedAt}`);
+		});
+		await aya.start();
+
+		await sessionFile(home, 7, { sessionId: ID_A, cwd, status: 'busy' }, start);
+		await append([
+			{ type: 'user', sessionId: ID_A, timestamp: at(0), message: { content: 'search' } },
+			{
+				type: 'assistant',
+				sessionId: ID_A,
+				timestamp: at(10),
+				message: {
+					id: 'm1',
+					stop_reason: 'tool_use',
+					content: [{ type: 'tool_use', id: 'toolu_1', name: 'WebSearch', input: {} }],
+				},
+			},
+		]);
+		await waitFor(() => tools.includes('WebSearch'));
+		await append([
+			{
+				type: 'user',
+				sessionId: ID_A,
+				timestamp: at(20),
+				message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }] },
+			},
+			// One reply, written as a thinking record and a text record, both ending the turn.
+			{
+				type: 'assistant',
+				sessionId: ID_A,
+				timestamp: at(30),
+				message: {
+					id: 'm2',
+					stop_reason: 'end_turn',
+					content: [{ type: 'thinking', thinking: '' }],
+				},
+			},
+			{
+				type: 'assistant',
+				sessionId: ID_A,
+				timestamp: at(31),
+				message: { id: 'm2', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] },
+			},
+			{ type: 'system', subtype: 'turn_duration', sessionId: ID_A, timestamp: at(40) },
+		]);
+		await waitFor(() => ends.length > 0);
+		await sessionFile(home, 7, { sessionId: ID_A, cwd, status: 'idle' }, start);
+		await waitFor(() => running.running()[0]?.status === 'idle');
+		await sleep(150);
+		assert.equal(ends.length, 1, `turn ended ${ends.length} times: ${ends.join(', ')}`);
+		assert.match(ends[0] ?? '', /^completed@/);
+	} finally {
+		// Always stop: open watchers would otherwise keep the test process alive.
+		await aya?.stop();
 		await rm(home, { recursive: true, force: true });
 	}
 });

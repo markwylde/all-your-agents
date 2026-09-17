@@ -30,7 +30,7 @@ aya.on('session:activity', (s, meta) => {
 		? `using ${a.tool.name}`
 		: a.lastTurn
 			? `turn ${a.lastTurn}${a.error ? `: ${a.error}` : ''}`
-			: 'turn started';
+			: 'working';
 	log('activity', `${who(s)}  ${detail}`, meta);
 });
 aya.on('session:close', (s, meta) => log('close', who(s), meta));
