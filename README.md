@@ -26,6 +26,16 @@ npm install all-your-agents
 
 Node.js ≥ 20, macOS and Linux. Pass `{ fs, processes }` to observe a remote machine.
 
+## Demos
+
+Run straight from source on Node ≥ 22.18 (no build step):
+
+```sh
+node ./demo/list.ts          # every session, live and historical, as a table
+node ./demo/list.ts --live   # only live sessions
+node ./demo/watch.ts         # stream session events as they happen (Ctrl+C to stop)
+```
+
 ## CLI
 
 `aya` is `top` for coding agents. It lists every live session, puts the ones waiting on you first, and updates as they change.
