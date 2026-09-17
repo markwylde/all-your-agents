@@ -88,6 +88,7 @@ function watchPath(path: string): WatchHandle {
 	const close = (): void => {
 		if (closed) return;
 		closed = true;
+		watcher.removeAllListeners();
 		watcher.close();
 		wake?.();
 		wake = undefined;

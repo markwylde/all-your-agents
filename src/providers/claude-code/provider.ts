@@ -1,4 +1,4 @@
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { decodeUtf8 } from '../../helpers/bytes.js';
 import { tailJsonl } from '../../helpers/tail-jsonl.js';
 import type { ProcessWatchHandle } from '../../helpers/types.js';
@@ -14,7 +14,13 @@ import {
 	toolResultText,
 } from './journal.js';
 import { listSessions } from './list.js';
-import { claudeHome, type PathOptions, sessionsDir, subagentsDir } from './paths.js';
+import {
+	claudeHome,
+	derivedJournalPath,
+	type PathOptions,
+	sessionsDir,
+	subagentsDir,
+} from './paths.js';
 import {
 	type ParsedSessionFile,
 	parseSessionFile,
@@ -29,6 +35,7 @@ type Bound = {
 	processWatch?: ProcessWatchHandle;
 	journalPath?: string;
 	journalClose?: () => void;
+	pendingJournalClose?: () => void;
 	subClose?: () => void;
 	childCloses: Map<string, () => void>;
 	toolUseToAgent: Map<string, string>;
@@ -63,6 +70,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 
 	const teardown = (bound: Bound, markStale: boolean): void => {
 		bound.journalClose?.();
+		bound.pendingJournalClose?.();
 		bound.subClose?.();
 		for (const close of bound.childCloses.values()) close();
 		bound.childCloses.clear();
@@ -222,6 +230,9 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		cutoff?: number,
 	): Promise<void> => {
 		if (!ctx) return;
+		if (bound.journalPath === path && bound.journalClose) return;
+		bound.pendingJournalClose?.();
+		bound.pendingJournalClose = undefined;
 		bound.journalClose?.();
 		bound.journalPath = path;
 		const records: unknown[] = [];
@@ -325,6 +336,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		const toolUseId = typeof rec.toolUseId === 'string' ? rec.toolUseId : undefined;
 		if (toolUseId) bound.toolUseToAgent.set(toolUseId, agentId);
 		if (bound.agents.has(agentId)) return;
+		if (toolUseId && bound.agents.has(toolUseId)) return;
 		const facts: SubagentFacts = {
 			id: agentId,
 			sessionId: bound.session.sessionId,
@@ -351,6 +363,20 @@ export function claudeCode(options: PathOptions = {}): Provider {
 				// closed
 			}
 		})();
+	};
+
+	const armPendingJournal = (bound: Bound, parsed: ParsedSessionFile): void => {
+		if (!ctx || bound.journalPath || !parsed.cwd) return;
+		bound.pendingJournalClose?.();
+		const derived = derivedJournalPath(homeOf(), parsed.cwd, parsed.sessionId);
+		const dir = dirname(derived);
+		const file = basename(derived);
+		const handle = ctx.watchDir(dir, (event) => {
+			if (bound.journalPath) return;
+			if (event.name !== file && event.path !== derived) return;
+			void attachJournal(bound, derived, false);
+		});
+		bound.pendingJournalClose = () => handle.close();
 	};
 
 	const bind = async (filePath: string, parsed: ParsedSessionFile): Promise<void> => {
@@ -413,6 +439,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		if (watch === 'unsupported') processWatchUnsupported = true;
 		else bound.processWatch = watch;
 		if (journal) await attachJournal(bound, journal, true);
+		else armPendingJournal(bound, parsed);
 	};
 
 	const rewrite = async (bound: Bound, parsed: ParsedSessionFile): Promise<void> => {
@@ -425,6 +452,13 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		}
 		const prev = bound.session;
 		bound.session = parsed;
+		if (!bound.journalPath) {
+			const journal = parsed.cwd
+				? await resolveJournal(ctx.fs, homeOf(), parsed.sessionId, parsed.cwd)
+				: await resolveJournal(ctx.fs, homeOf(), parsed.sessionId);
+			if (journal) await attachJournal(bound, journal, false);
+			else armPendingJournal(bound, parsed);
+		}
 		if (parsed.cwd && parsed.cwd !== prev.cwd) {
 			ctx.emit('session:update', {
 				id: parsed.sessionId,
