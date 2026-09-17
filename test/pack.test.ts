@@ -18,8 +18,8 @@ test('npm pack installs and imports both entry points', async (t) => {
 		const tgz = execFileSync('sh', ['-c', 'ls *.tgz'], { cwd: dir, encoding: 'utf8' }).trim();
 		execFileSync('npm', ['init', '-y'], { cwd: dir, stdio: 'pipe' });
 		execFileSync('npm', ['install', join(dir, tgz)], { cwd: dir, stdio: 'pipe' });
-		const src = `import aya, { builtInProviders } from 'all-your-agents';
-import { defineConformanceTests } from 'all-your-agents/testing';
+		const src = `import aya, { builtInProviders } from '@markwylde/all-your-agents';
+import { defineConformanceTests } from '@markwylde/all-your-agents/testing';
 if (!builtInProviders.length) throw new Error('no providers');
 if (typeof aya !== 'function') throw new Error('default');
 if (typeof defineConformanceTests !== 'function') throw new Error('testing');

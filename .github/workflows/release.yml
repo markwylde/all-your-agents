@@ -12,6 +12,7 @@ permissions:
   contents: write      # create the GitHub release and push the tag
   issues: write        # semantic-release comments on released issues
   pull-requests: write # ...and on released pull requests
+  packages: write      # publish to GitHub Packages
   id-token: write      # OIDC, for npm trusted publishing and provenance
 
 jobs:

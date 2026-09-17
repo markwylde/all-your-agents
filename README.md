@@ -1,12 +1,12 @@
 # all-your-agents
 
 [![CI](https://github.com/markwylde/all-your-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/markwylde/all-your-agents/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/all-your-agents)](https://www.npmjs.com/package/all-your-agents)
+[![npm](https://img.shields.io/npm/v/%40markwylde%2Fall-your-agents)](https://www.npmjs.com/package/@markwylde/all-your-agents)
 
 Watch every coding agent on this machine, and inspect the sessions they leave behind.
 
 ```ts
-import AllYourAgents, { builtInProviders } from 'all-your-agents';
+import AllYourAgents, { builtInProviders } from '@markwylde/all-your-agents';
 
 const aya = AllYourAgents({
   providers: [...builtInProviders],
@@ -24,7 +24,7 @@ No polling, ever ([ADR 0001](docs/adr/0001-never-poll.md)). `start()` watches th
 ## Install
 
 ```sh
-npm install all-your-agents
+npm install @markwylde/all-your-agents
 ```
 
 Node.js ≥ 20, macOS and Linux. Pass `{ fs, processes }` to observe a remote machine.
@@ -44,12 +44,12 @@ node ./demo/watch.ts         # stream session events as they happen (Ctrl+C to s
 `all-your-agents` is `top` for coding agents. It lists every live session, puts the ones waiting on you first, and updates as they change. Press `H` for every session on the machine, finished ones included, and `t` to read what any of them said.
 
 ```sh
-npx all-your-agents            # full-screen live view
-npx all-your-agents --once     # print a table and exit (also when piped)
-npx all-your-agents --json     # print live sessions as JSON and exit
-npx all-your-agents --all      # also show sessions that close while it is open
-npx all-your-agents --history  # start with every session, not only live ones
-npx all-your-agents --json --history   # every session as JSON, live ones first
+npx @markwylde/all-your-agents            # full-screen live view
+npx @markwylde/all-your-agents --once     # print a table and exit (also when piped)
+npx @markwylde/all-your-agents --json     # print live sessions as JSON and exit
+npx @markwylde/all-your-agents --all      # also show sessions that close while it is open
+npx @markwylde/all-your-agents --history  # start with every session, not only live ones
+npx @markwylde/all-your-agents --json --history   # every session as JSON, live ones first
 ```
 
 | Key | Action |
@@ -71,7 +71,7 @@ The screen redraws only when an agent changes, a key is pressed, or the terminal
 Live sessions have a `pid`. Historical ones do not. `kind` is `interactive` or `headless`.
 
 ```ts
-import type { Session, SessionActivity, Subagent, Turn, SessionEvent } from 'all-your-agents';
+import type { Session, SessionActivity, Subagent, Turn, SessionEvent } from '@markwylde/all-your-agents';
 ```
 
 `session.activity` is the current or last turn (`tool`, `lastTurn`, `error`, `openSubagents`), separate from `status`. `session.subagents()` lists launched subagents. `transcript()` yields `Turn`s; `events()` tails normalized `SessionEvent`s until you stop iterating or call `close()` on it (both work while it is waiting) (`user`, `assistant`, `tool`, `tool-result`, `title`, `turn-end`, `subagent`, `subagent-end`, `error`, `other`). Each item keeps the original record on `raw`.
@@ -131,7 +131,7 @@ Status: `busy` → `running`, `waiting` → `waiting`, `idle`/`shell` → `idle`
 ## Testing kit
 
 ```ts
-import { defineConformanceTests, createMemoryHarness } from 'all-your-agents/testing';
+import { defineConformanceTests, createMemoryHarness } from '@markwylde/all-your-agents/testing';
 
 const { provider, driver } = createMemoryHarness();
 defineConformanceTests({ name: 'memory', provider, driver });
