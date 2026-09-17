@@ -17,8 +17,30 @@ function toStat(st: {
 	};
 }
 
+/**
+ * On macOS libuv serves every watch in the process from one FSEvents stream, and on each
+ * add or remove destroys it and creates a new one that starts from "now". An event that
+ * lands during the rebuild is never delivered, to any watch. So there, every open and
+ * close is announced, process-wide, and the helpers catch up after it.
+ */
+const WATCHES_DISTURB_EACH_OTHER = process.platform === 'darwin';
+const churnListeners = new Set<() => void>();
+
+function watchChurned(): void {
+	if (!WATCHES_DISTURB_EACH_OTHER) return;
+	for (const listener of [...churnListeners]) listener();
+}
+
+function onWatchChurn(listener: () => void): () => void {
+	churnListeners.add(listener);
+	return () => {
+		churnListeners.delete(listener);
+	};
+}
+
 export function createLocalFs(): Fs {
 	return {
+		...(WATCHES_DISTURB_EACH_OTHER ? { onWatchChurn } : {}),
 		async readFile(path, opts) {
 			if (opts?.maxBytes != null) {
 				const st = await this.stat(path);
@@ -92,7 +114,10 @@ function watchPath(path: string): WatchHandle {
 		watcher.close();
 		wake?.();
 		wake = undefined;
+		watchChurned();
 	};
+
+	watchChurned();
 
 	return {
 		close,

@@ -2,12 +2,17 @@ import { basename, dirname, join } from 'node:path';
 import { systemClock } from './clock.ts';
 import type { Coalescer } from './coalesce.ts';
 import { coalesce } from './coalesce.ts';
-import type { DebounceOptions, DirChange, Fs, WatchHandle } from './types.ts';
+import type { DebounceOptions, DirChange, Fs, FsStat, WatchHandle } from './types.ts';
 
 export type WatchDirHandle = {
 	close(): void;
 	ready: Promise<void>;
 };
+
+/** What an entry looked like when it was last serviced, to tell whether it has changed since. */
+type Baseline = { size: number; mtimeMs: number };
+
+const baselineOf = (st: FsStat): Baseline => ({ size: st.size, mtimeMs: st.mtimeMs });
 
 export function watchDir(
 	fs: Fs,
@@ -21,6 +26,16 @@ export function watchDir(
 	const coalescer = coalesce(quietMs, maxLatencyMs, clock);
 	let closed = false;
 	let current: WatchHandle | undefined;
+
+	/**
+	 * Where the filesystem can drop events while another watch opens or closes, look once
+	 * at what this watch covers after that has happened. What there is to look at depends
+	 * on whether the directory exists yet. Subscribed before any watch of our own opens.
+	 */
+	let catchUp: () => Promise<void> = async () => {};
+	const unsubscribe = fs.onWatchChurn?.(() => {
+		if (!closed) coalescer.notify(`churn:${path}`, () => void catchUp());
+	});
 
 	/** Open a watch, unless closed. Never await between the `closed` check and `current`. */
 	const open = (target: string): WatchHandle | undefined => {
@@ -53,7 +68,7 @@ export function watchDir(
 			await awaitDirectory();
 			return;
 		}
-		const known = new Set<string>();
+		const known = new Map<string, Baseline>();
 		let gone = false;
 
 		/** The directory itself went away: everything in it did too. Wait for it to return. */
@@ -61,7 +76,7 @@ export function watchDir(
 			if (gone || closed) return;
 			gone = true;
 			release(handle);
-			for (const name of [...known]) {
+			for (const name of [...known.keys()]) {
 				known.delete(name);
 				onChange({ type: 'delete', name, path: join(path, name) });
 			}
@@ -75,7 +90,7 @@ export function watchDir(
 			if (closed || gone) return;
 			if (st) {
 				const type = known.has(name) ? 'change' : 'create';
-				known.add(name);
+				known.set(name, baselineOf(st));
 				onChange({ type, name, path: child });
 				return;
 			}
@@ -94,7 +109,42 @@ export function watchDir(
 			}
 			const seen = new Set(names);
 			for (const name of names) await serviceName(name);
-			for (const name of [...known]) {
+			for (const name of [...known.keys()]) {
+				if (!seen.has(name)) await serviceName(name);
+			}
+		};
+
+		/** Report what differs from what was last serviced, and nothing else. */
+		catchUp = async (): Promise<void> => {
+			if (closed || gone) return;
+			let names: string[];
+			try {
+				names = await fs.readDir(path);
+			} catch {
+				await directoryGone();
+				return;
+			}
+			for (const name of names) {
+				if (closed || gone) return;
+				if (!known.has(name)) {
+					await serviceName(name);
+					continue;
+				}
+				const child = join(path, name);
+				const st = await fs.stat(child);
+				if (closed || gone) return;
+				// A notification may have serviced it while we were looking.
+				const last = known.get(name);
+				if (!st || !last) {
+					await serviceName(name);
+					continue;
+				}
+				if (last.size === st.size && last.mtimeMs === st.mtimeMs) continue;
+				known.set(name, baselineOf(st));
+				onChange({ type: 'change', name, path: child });
+			}
+			const seen = new Set(names);
+			for (const name of [...known.keys()]) {
 				if (!seen.has(name)) await serviceName(name);
 			}
 		};
@@ -125,8 +175,13 @@ export function watchDir(
 			if (closed || gone) return;
 			// An event may have reported it already; creation is reported once.
 			if (known.has(name)) continue;
-			known.add(name);
-			onChange({ type: 'create', name, path: join(path, name) });
+			const child = join(path, name);
+			// Taken before reporting: what the consumer then reads is at least this new.
+			const st = await fs.stat(child);
+			if (closed || gone) return;
+			if (!st || known.has(name)) continue;
+			known.set(name, baselineOf(st));
+			onChange({ type: 'create', name, path: child });
 		}
 	};
 
@@ -165,6 +220,7 @@ export function watchDir(
 				// ended
 			}
 		})();
+		catchUp = check;
 		// It may have appeared between the stat that missed it and the watch opening.
 		await check();
 	};
@@ -175,6 +231,7 @@ export function watchDir(
 		ready,
 		close() {
 			closed = true;
+			unsubscribe?.();
 			coalescer.dispose();
 			current?.close();
 			current = undefined;

@@ -32,6 +32,12 @@ export type Fs = {
 	readDir(path: string): Promise<string[]>;
 	stat(path: string): Promise<FsStat | null>;
 	watch(path: string): WatchHandle;
+	/**
+	 * Present when this filesystem's watches can drop events while another watch is being
+	 * opened or closed. Calls `listener` after each watch it opens or closes; returns
+	 * unsubscribe. The watch helpers use it to re-verify once what they cover.
+	 */
+	onWatchChurn?(listener: () => void): () => void;
 };
 
 export type ProcessInfo = {

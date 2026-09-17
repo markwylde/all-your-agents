@@ -25,6 +25,7 @@ export function spyFs(inner: Fs = createLocalFs()): SpyFs {
 		bytesRead,
 		hooks: {},
 		openWatches: () => [...open.values()],
+		...(inner.onWatchChurn ? { onWatchChurn: inner.onWatchChurn.bind(inner) } : {}),
 		readFile: async (path, opts) => count(path, await inner.readFile(path, opts)),
 		readRange: async (path, start, end) => count(path, await inner.readRange(path, start, end)),
 		async readDir(path) {

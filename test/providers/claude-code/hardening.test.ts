@@ -9,7 +9,7 @@ import { claudeCode } from '../../../src/providers/claude-code/index.js';
 import { encodeProjectDir } from '../../../src/providers/claude-code/paths.js';
 import type { AgentsError, Session } from '../../../src/types.js';
 import { spyFs } from '../../util/spy-fs.js';
-import { settle, sleep, waitFor } from '../../util/wait.js';
+import { sleep, waitFor } from '../../util/wait.js';
 import { fakeProcesses, journal, sessionFile } from './home.js';
 
 const ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -189,7 +189,6 @@ test('stop while a session is being bound leaves no watch open', async () => {
 	aya.on('session:open', (s) => seen.push(s));
 	try {
 		await aya.start();
-		await settle();
 		await bindSession();
 		await waitFor(() => g.held);
 		await aya.stop();
@@ -224,7 +223,6 @@ test('a session that closes while its journal backlog is being read attaches not
 	aya.on('session:close', (s) => closed.push(s.id));
 	try {
 		await aya.start();
-		await settle();
 		await bindSession();
 		await waitFor(() => g.held);
 		// The provider keeps running; only this session goes away.
@@ -258,7 +256,6 @@ test('a session file removed while it is being bound does not come back', async 
 	aya.on('session:close', () => events.push('close'));
 	try {
 		await aya.start();
-		await settle();
 		await bindSession();
 		await waitFor(() => g.held);
 		await unlink(join(home, 'sessions', '1.json'));

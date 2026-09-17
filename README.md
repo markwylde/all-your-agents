@@ -16,7 +16,7 @@ aya.on('session:create', (session) => {
 aya.start();
 ```
 
-No polling, ever ([ADR 0001](docs/adr/0001-never-poll.md)). `start()` watches the files each harness already writes and the processes that write them. Bursts are coalesced per path (about 25 ms quiet, at most 1 s behind). `stop()` drops every file and process watch.
+No polling, ever ([ADR 0001](docs/adr/0001-never-poll.md)). `start()` watches the files each harness already writes and the processes that write them. Bursts are coalesced per path (about 25 ms quiet, at most 1 s behind). `stop()` drops every file and process watch. On macOS, where opening one `fs.watch` can make the others miss an event, each watch re-checks what it covers once after any watch opens or closes (see the ADR); a custom `fs` can opt in with `onWatchChurn`.
 
 ## Install
 

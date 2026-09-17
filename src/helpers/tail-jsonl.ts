@@ -104,6 +104,12 @@ export function tailJsonl(fs: Fs, path: string, opts: TailJsonlOptions = {}): Ta
 		void readAppended();
 	};
 
+	// Subscribed before our own watch opens: that open is churn too, so an append that
+	// lands before the watch is really live is still read.
+	const unsubscribe = fs.onWatchChurn?.(() => {
+		if (!closed) coalescer.notify(`churn:${path}`, requestRead);
+	});
+
 	let handle: WatchHandle | undefined;
 	try {
 		handle = fs.watch(path);
@@ -116,6 +122,11 @@ export function tailJsonl(fs: Fs, path: string, opts: TailJsonlOptions = {}): Ta
 	}
 
 	const follow = async (): Promise<void> => {
+		// A read asked for while the first one was still running.
+		if (queued) {
+			queued = false;
+			requestRead();
+		}
 		if (!handle || closed) return;
 		const name = basename(path);
 		try {
@@ -146,6 +157,7 @@ export function tailJsonl(fs: Fs, path: string, opts: TailJsonlOptions = {}): Ta
 	const close = (): void => {
 		if (closed) return;
 		closed = true;
+		unsubscribe?.();
 		coalescer.dispose();
 		handle?.close();
 		wakeUp();

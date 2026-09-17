@@ -7,7 +7,7 @@ import { createLocalFs } from '../../src/helpers/fs.js';
 import type { Fs, FsWatchEvent } from '../../src/helpers/types.js';
 import { watchDir } from '../../src/helpers/watch-dir.js';
 import { spyFs } from '../util/spy-fs.js';
-import { settle, sleep, waitFor } from '../util/wait.js';
+import { sleep, waitFor } from '../util/wait.js';
 
 async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {
 	const dir = await mkdtemp(join(tmpdir(), 'aya-watch-'));
@@ -212,12 +212,10 @@ test('a watched directory that is removed and created again is watched again', a
 		try {
 			await w.ready;
 			assert.deepEqual(events, ['create:old.json']);
-			await settle();
 			await rm(sessions, { recursive: true });
 			await waitFor(() => events.includes('delete:old.json'), 3000);
 			// Re-armed on the parent, waiting for the directory to come back.
 			await waitFor(() => fs.openWatches().includes(dir), 3000);
-			await settle();
 			await mkdir(sessions);
 			await writeFile(join(sessions, 'new.json'), '{}');
 			await waitFor(() => events.includes('create:new.json'), 3000);
