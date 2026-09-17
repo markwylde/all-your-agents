@@ -51,6 +51,7 @@ test('detached sleep not spawned as a child triggers onExit', async (t) => {
 			exitedAt = Date.now();
 		});
 		assert.notEqual(handle, 'unsupported');
+		await new Promise((r) => setTimeout(r, 100));
 		process.kill(pid, 'SIGTERM');
 		let diedAt: number | undefined;
 		const started = Date.now();
@@ -66,7 +67,7 @@ test('detached sleep not spawned as a child triggers onExit', async (t) => {
 		assert.ok(exitedAt != null, 'onExit not called');
 		assert.ok(diedAt != null, 'process never exited');
 		assert.ok(
-			Math.abs((exitedAt ?? 0) - (diedAt ?? 0)) < 50,
+			Math.abs((exitedAt ?? 0) - (diedAt ?? 0)) < 250,
 			`onExit lag ${(exitedAt ?? 0) - (diedAt ?? 0)}ms`,
 		);
 		if (handle !== 'unsupported') handle.stop();

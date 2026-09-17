@@ -194,6 +194,15 @@ function runLinux(koffi: typeof import('koffi')): void {
 
 	const lib = koffi.load('libc.so.6');
 	const syscall = lib.func('long syscall(long n, ...)');
+	let pidfdOpen: (pid: number, flags: number) => number;
+	try {
+		pidfdOpen = lib.func('int pidfd_open(int pid, unsigned int flags)');
+	} catch {
+		pidfdOpen = (pid, flags) => {
+			const fd = Number(syscall(SYS_pidfd_open, pid, flags));
+			return !Number.isFinite(fd) || fd > 0x7fffffff ? -1 : fd;
+		};
+	}
 	const epollCreate1 = lib.func('int epoll_create1(int flags)');
 	const epollCtl = lib.func('int epoll_ctl(int epfd, int op, int fd, void *event)');
 	const epollWait = lib.func('int epoll_wait(int epfd, void *events, int maxevents, int timeout)');
@@ -242,13 +251,17 @@ function runLinux(koffi: typeof import('koffi')): void {
 				}
 				continue;
 			}
-			const fd = Number(syscall(SYS_pidfd_open, pid, 0));
+			const fd = pidfdOpen(pid, 0);
 			if (fd < 0) {
 				port.postMessage({ type: 'exit', pid });
 				continue;
 			}
 			pidfds.set(pid, fd);
-			epollCtl(epfd, EPOLL_CTL_ADD, fd, encodeEpoll(EPOLLIN, fd));
+			if (epollCtl(epfd, EPOLL_CTL_ADD, fd, encodeEpoll(EPOLLIN, fd)) !== 0) {
+				closeFn(fd);
+				pidfds.delete(pid);
+				port.postMessage({ type: 'exit', pid });
+			}
 		}
 		pending.clear();
 	};
