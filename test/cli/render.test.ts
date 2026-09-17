@@ -31,6 +31,12 @@ test('keys: readline keypresses map to view keys', () => {
 	assert.deepEqual(toKey('q', { name: 'q' }), { char: 'q' });
 	assert.deepEqual(toKey('?', { name: undefined, sequence: '?' }), { char: '?' });
 	assert.equal(toKey('\x01', { name: 'a', ctrl: true }), undefined);
+	// What Node's keypress decoder actually emits for a lone Esc byte.
+	assert.equal(
+		toKey(undefined, { sequence: '\x1b', name: 'escape', ctrl: false, meta: true }),
+		'escape',
+	);
+	assert.equal(toKey('x', { name: 'x', meta: true, sequence: '\x1bx' }), undefined);
 });
 
 const sample = () =>

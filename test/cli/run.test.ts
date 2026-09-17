@@ -204,6 +204,35 @@ test('detail view fetches subagents once and ignores late results', async () => 
 	assert.equal(await exit, 0);
 });
 
+test('raw terminal bytes drive the keys, including a lone Esc', async () => {
+	const t = setup();
+	await t.driver.createLiveSession({ id: 'a', pid: 11, status: 'busy', title: 'Alpha' });
+	await t.driver.createLiveSession({ id: 'b', pid: 12, status: 'idle', title: 'Beta' });
+	const exit = t.start();
+	await waitFor(() => /2 live/.test(t.stdout.lastFrame));
+
+	t.stdin.write('\x1b[B'); // down arrow
+	await waitFor(() => /^> idle .*Beta/m.test(t.stdout.lastFrame));
+
+	t.stdin.write('\r');
+	await waitFor(() => /Session\s+b/.test(t.stdout.lastFrame));
+	t.stdin.write('\x1b');
+	await waitFor(() => /STATUS/.test(t.stdout.lastFrame), 3000);
+
+	t.stdin.write('/alp\r');
+	await waitFor(() => /filter: alp 1\/2/.test(t.stdout.lastFrame));
+	t.stdin.write('\x1b');
+	await waitFor(() => !/filter:/.test(t.stdout.lastFrame), 3000);
+
+	t.stdin.write('?');
+	await waitFor(() => /Keys/.test(t.stdout.lastFrame));
+	t.stdin.write('\x1b');
+	await waitFor(() => /STATUS/.test(t.stdout.lastFrame), 3000);
+
+	t.stdin.write('q');
+	assert.equal(await exit, 0);
+});
+
 test('provider errors show on the status line without crashing', async () => {
 	const broken: Provider = {
 		id: 'broken',
