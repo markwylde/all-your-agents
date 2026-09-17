@@ -3,6 +3,7 @@ export type CliMode = 'tui' | 'once' | 'json';
 export type CliArgs = {
 	mode: CliMode;
 	all: boolean;
+	history: boolean;
 	help: boolean;
 	version: boolean;
 };
@@ -20,6 +21,7 @@ Options:
   --once       Print a table of live sessions and exit
   --json       Print live sessions as JSON and exit
   --all        Show sessions that close while it is open
+  --history    Include every session, not only live ones
   --help       Show this help
   --version    Print the version
 
@@ -32,6 +34,8 @@ Keys:
   s > / <          Next / previous sort column
   r                Reverse sort order
   c                Show or hide closed sessions
+  H                Show or hide history: every session, not only live ones
+  t                Transcript of the selected session (t or Esc closes)
   ? h              Help
   q Ctrl+C         Quit
 
@@ -39,7 +43,7 @@ When stdout is not a terminal, ${COMMAND} behaves as if --once was given.
 `;
 
 export function parseArgs(argv: readonly string[]): ParseResult {
-	const args: CliArgs = { mode: 'tui', all: false, help: false, version: false };
+	const args: CliArgs = { mode: 'tui', all: false, history: false, help: false, version: false };
 	for (const arg of argv) {
 		switch (arg) {
 			case '--once':
@@ -50,6 +54,9 @@ export function parseArgs(argv: readonly string[]): ParseResult {
 				break;
 			case '--all':
 				args.all = true;
+				break;
+			case '--history':
+				args.history = true;
 				break;
 			case '--help':
 			case '-h':

@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createLocalFs } from '../../src/helpers/fs.js';
+import type { Fs, FsWatchEvent } from '../../src/helpers/types.js';
 import { watchDir } from '../../src/helpers/watch-dir.js';
 import { spyFs } from '../util/spy-fs.js';
-import { sleep, waitFor } from '../util/wait.js';
+import { settle, sleep, waitFor } from '../util/wait.js';
 
 async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {
 	const dir = await mkdtemp(join(tmpdir(), 'aya-watch-'));
@@ -100,25 +101,104 @@ test('a change to one of fifty entries reads only that entry', async () => {
 	});
 });
 
-test('an entry created during the initial scan is reported exactly once', async () => {
-	await withDir(async (dir) => {
-		const fs = spyFs();
-		await writeFile(join(dir, 'old.json'), '{}');
-		// readDir has already listed the directory when this runs, so the scan cannot see it.
-		fs.hooks.readDir = async () => {
-			fs.hooks.readDir = undefined;
-			await writeFile(join(dir, 'racing.json'), '{}');
-		};
-		const events: string[] = [];
-		const w = watchDir(fs, dir, (e) => events.push(`${e.type}:${e.name}`), { quietMs: 15 });
+/**
+ * One directory, scripted: the test decides what it holds and when a notification is
+ * delivered, so the order of watch, scan and event does not depend on the platform.
+ */
+function scriptedDir(dir: string, names: string[]) {
+	const entries = new Set(names);
+	const calls: string[] = [];
+	let deliver: ((event: FsWatchEvent) => void) | undefined;
+	let onReadDir: (() => Promise<void> | void) | undefined;
+	const file = { size: 0, mtimeMs: 0, isFile: true, isDirectory: false };
+	const fs: Fs = {
+		readFile: async () => new Uint8Array(),
+		readRange: async () => new Uint8Array(),
+		async stat(path) {
+			if (path === dir) return { ...file, isFile: false, isDirectory: true };
+			return entries.has(path.slice(dir.length + 1)) ? file : null;
+		},
+		async readDir() {
+			calls.push('readDir');
+			const listed = [...entries];
+			await onReadDir?.();
+			return listed;
+		},
+		watch() {
+			calls.push('watch');
+			const pending: FsWatchEvent[] = [];
+			let wake: (() => void) | undefined;
+			let closed = false;
+			deliver = (event) => {
+				pending.push(event);
+				wake?.();
+			};
+			return {
+				close() {
+					closed = true;
+					wake?.();
+				},
+				async *[Symbol.asyncIterator]() {
+					while (!closed) {
+						const next = pending.shift();
+						if (next) yield next;
+						else
+							await new Promise<void>((resolve) => {
+								wake = resolve;
+							});
+					}
+				},
+			};
+		},
+	};
+	return {
+		fs,
+		calls,
+		create(name: string) {
+			entries.add(name);
+			deliver?.({ type: 'rename', filename: name });
+		},
+		duringReadDir(fn: () => Promise<void> | void) {
+			onReadDir = fn;
+		},
+	};
+}
+
+test('the watch opens before the scan, so an entry created during the scan is reported once', async () => {
+	const dir = '/scripted/sessions';
+	const d = scriptedDir(dir, ['old.json']);
+	// The listing has been taken when this runs: only the notification can report it.
+	d.duringReadDir(() => d.create('racing.json'));
+	const events: string[] = [];
+	const w = watchDir(d.fs, dir, (e) => events.push(`${e.type}:${e.name}`), { quietMs: 5 });
+	try {
 		await waitFor(() => events.includes('create:racing.json'));
-		await sleep(80);
-		assert.deepEqual(events.filter((e) => e.startsWith('create:')).sort(), [
-			'create:old.json',
-			'create:racing.json',
-		]);
+		await sleep(30);
+		assert.deepEqual(d.calls.slice(0, 2), ['watch', 'readDir']);
+		assert.deepEqual(events.sort(), ['create:old.json', 'create:racing.json']);
+	} finally {
 		w.close();
+	}
+});
+
+test('an entry the notification reported first is not reported again by the scan', async () => {
+	const dir = '/scripted/sessions';
+	const d = scriptedDir(dir, []);
+	const events: string[] = [];
+	// Created and fully serviced while the listing is still in flight, and the listing sees it too.
+	d.duringReadDir(async () => {
+		d.create('a.json');
+		await waitFor(() => events.includes('create:a.json'));
 	});
+	const fs: Fs = { ...d.fs, readDir: async (p) => [...(await d.fs.readDir(p)), 'a.json'] };
+	const w = watchDir(fs, dir, (e) => events.push(`${e.type}:${e.name}`), { quietMs: 5 });
+	try {
+		await w.ready;
+		await sleep(30);
+		assert.deepEqual(events, ['create:a.json']);
+	} finally {
+		w.close();
+	}
 });
 
 test('a watched directory that is removed and created again is watched again', async () => {
@@ -129,15 +209,26 @@ test('a watched directory that is removed and created again is watched again', a
 		await writeFile(join(sessions, 'old.json'), '{}');
 		const events: string[] = [];
 		const w = watchDir(fs, sessions, (e) => events.push(`${e.type}:${e.name}`), { quietMs: 15 });
-		await w.ready;
-		assert.deepEqual(events, ['create:old.json']);
-		await rm(sessions, { recursive: true });
-		await waitFor(() => events.includes('delete:old.json'), 3000);
-		await mkdir(sessions);
-		await writeFile(join(sessions, 'new.json'), '{}');
-		await waitFor(() => events.includes('create:new.json'), 3000);
-		assert.deepEqual(events, ['create:old.json', 'delete:old.json', 'create:new.json']);
-		w.close();
+		try {
+			await w.ready;
+			assert.deepEqual(events, ['create:old.json']);
+			await settle();
+			await rm(sessions, { recursive: true });
+			await waitFor(() => events.includes('delete:old.json'), 3000);
+			// Re-armed on the parent, waiting for the directory to come back.
+			await waitFor(() => fs.openWatches().includes(dir), 3000);
+			await settle();
+			await mkdir(sessions);
+			await writeFile(join(sessions, 'new.json'), '{}');
+			await waitFor(() => events.includes('create:new.json'), 3000);
+			// A late `change` for a file that exists is allowed; creation and removal are exact.
+			assert.deepEqual(
+				events.filter((e) => !e.startsWith('change:')),
+				['create:old.json', 'delete:old.json', 'create:new.json'],
+			);
+		} finally {
+			w.close();
+		}
 		assert.deepEqual(fs.openWatches(), []);
 	});
 });

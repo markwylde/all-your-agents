@@ -2,10 +2,15 @@ import type { Session } from '../index.ts';
 import { fit, style, truncate, width } from './ansi.ts';
 import { folder, shortTime, value } from './format.ts';
 
-type Cell = (s: Session, now: number, home?: string) => string;
+type Cell = (s: Session, now: number, home: string | undefined, live: boolean) => string;
+
+/** Ids of the sessions that are live. Omitted when every session given is. */
+export type LiveIds = ReadonlySet<string> | undefined;
+
+const isLive = (s: Session, live: LiveIds): boolean => live?.has(s.id) ?? true;
 
 const COLUMNS: [string, Cell][] = [
-	['STATUS', (s) => value(s.status)],
+	['STATUS', (s, _n, _h, live) => (live ? value(s.status) : 'closed')],
 	['PID', (s) => value(s.pid)],
 	['HARNESS', (s) => value(s.harness)],
 	['TITLE', (s) => truncate(value(s.title), 60)],
@@ -19,17 +24,24 @@ const COLUMNS: [string, Cell][] = [
 
 const RANK: Record<string, number> = { waiting: 0, running: 1, idle: 2 };
 
-/** Plain-text table of live sessions, one header line then one line per session. */
+/** Live sessions first, by status; then the rest. Newest first within each. */
+export function displayOrder(sessions: Session[], live?: LiveIds): Session[] {
+	const rank = (s: Session): number => (isLive(s, live) ? (RANK[s.status ?? ''] ?? 3) : 4);
+	return [...sessions].sort(
+		(a, b) =>
+			rank(a) - rank(b) || (b.updatedAt ?? b.startedAt ?? 0) - (a.updatedAt ?? a.startedAt ?? 0),
+	);
+}
+
+/** Plain-text table of sessions, one header line then one line per session. */
 export function formatTable(
 	sessions: Session[],
-	opts: { now: number; color: boolean; home?: string },
+	opts: { now: number; color: boolean; home?: string; live?: LiveIds },
 ): string {
-	const sorted = [...sessions].sort(
-		(a, b) =>
-			(RANK[a.status ?? ''] ?? 3) - (RANK[b.status ?? ''] ?? 3) ||
-			(b.updatedAt ?? b.startedAt ?? 0) - (a.updatedAt ?? a.startedAt ?? 0),
+	const sorted = displayOrder(sessions, opts.live);
+	const body = sorted.map((s) =>
+		COLUMNS.map(([, cell]) => cell(s, opts.now, opts.home, isLive(s, opts.live))),
 	);
-	const body = sorted.map((s) => COLUMNS.map(([, cell]) => cell(s, opts.now, opts.home)));
 	const widths = COLUMNS.map(([label], i) =>
 		Math.max(width(label), ...body.map((row) => width(row[i] ?? ''))),
 	);
@@ -40,7 +52,8 @@ export function formatTable(
 			.trimEnd();
 	const out = [style(line(COLUMNS.map(([label]) => label)), ['bold'], opts.color)];
 	for (const [i, row] of body.entries()) {
-		const status = sorted[i]?.status;
+		const session = sorted[i];
+		const status = session && isLive(session, opts.live) ? session.status : undefined;
 		const text = line(row);
 		if (status === 'waiting') out.push(style(text, ['yellow'], opts.color));
 		else if (status === 'running') out.push(style(text, ['cyan'], opts.color));
@@ -49,8 +62,8 @@ export function formatTable(
 	return `${out.join('\n')}\n`;
 }
 
-export function formatJson(sessions: Session[]): string {
-	const rows = sessions.map((s) => ({
+export function formatJson(sessions: Session[], live?: LiveIds): string {
+	const rows = displayOrder(sessions, live).map((s) => ({
 		id: s.id,
 		harness: s.harness,
 		provider: s.provider,

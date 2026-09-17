@@ -31,7 +31,7 @@ Alternative: a separate history screen with its own table. Rejected: it duplicat
 `run.ts` keeps the `Session` objects it has seen (live and from history) in one map, so the detail view's subagent fetch and the transcript work for both.
 
 ### 3. The transcript is one `events()` stream, batched by `setImmediate`
-`t` sets `ViewState.transcript = { sessionId, items: [], loading: true, scroll: 0, follow: true }`. `run.ts` sees it open and iterates `session.events()`; it sees it close (or the command exit) and calls the iterator's `return()`, which releases the journal watch.
+`t` sets `ViewState.transcript = { sessionId, items: [], scroll: 0, follow: true }`. `run.ts` sees it open and iterates `session.events()`; it sees it close (or the command exit) and calls the stream's `close()` (see 3a), which releases the journal watch. There is no loading state: a follow stream has no "end of stored records" signal, so an empty transcript reads `No records yet.` until something arrives.
 
 Each `SessionEvent` is reduced at once to a small `TranscriptItem` (`kind`, `text`, `at`, and for tools the name), so `raw` records are not retained. Items are buffered and handed to the reducer in one `transcript:append` event per `setImmediate`. The stored records arrive as one unbroken chain of microtasks, so they land in a single batch and a single redraw; later appends land in small batches.
 
@@ -48,8 +48,8 @@ The core creates an `AbortController` per `events()` call and passes its signal 
 
 Alternative: race `next()` against a cancel promise in the CLI and abandon the iterator. Rejected: the generator and its watch would stay alive, which is the leak this is meant to avoid.
 
-### 4. Lines are computed in `transcript.ts` and cached per `(items, cols)`
-`transcriptLines(items, cols)` is pure and wraps text with the same `wrap` the detail view uses. Both the reducer (to clamp `scroll` and implement `follow`) and the renderer need the line count, so the function lives in its own module and memoizes on the identity of the `items` array and `cols` in a `WeakMap`. The reducer replaces `items` on append, so the cache invalidates itself, and a scroll keypress costs a slice, not a re-wrap.
+### 4. Lines are computed in `transcript.ts` and remembered incrementally
+`transcriptLines(items, cols)` is pure in effect: same input, same output. It word-wraps (the detail view's hard wrap reads badly for prose). Both the reducer (to clamp `scroll` and implement `follow`) and the renderer need the line count, so it lives in its own module and remembers its last result. Items only grow at the end, so when the new list extends the remembered one (same `cols`, and the item at the remembered length is the same object) only the new items are wrapped; anything else starts over. A scroll keypress costs a slice, and an append to a 50,000-line transcript wraps a handful of lines.
 
 `follow` is true while the view is at the end. Scrolling up clears it; `End` sets it. With `follow`, `scroll` is recomputed to the last page after every append and resize.
 
@@ -57,7 +57,7 @@ Alternative: race `next()` against a cancel promise in the CLI and abandon the i
 A `tool-result` with `isError` becomes an item `{ kind: 'tool-failed', text: <tool name> }`, using a `Map` of tool id to name kept by `run.ts` for the life of the stream. Marking the earlier `tool` item instead would mean mutating state the reducer has already handed to the renderer.
 
 ### 6. One-shot `--history` uses `sessions()`
-`--once --history` and `--json --history` call `aya.sessions()` after `ready` instead of `running()`. `formatTable` sorts live sessions first by the existing rank, then the rest newest first, and prints `closed` for a session with no `pid`. JSON output needs no change beyond the input list.
+`--once --history` and `--json --history` call `aya.sessions()` after `ready` instead of `running()`. `formatTable` sorts live sessions first by the existing rank, then the rest newest first, and prints `closed` for a session that is not in `running()`. Liveness is passed in as a set of ids rather than inferred from `pid`, which a provider is allowed to omit for a live session. JSON output needs no change beyond the input list.
 
 ### 7. Keys
 `H` (history) and `t` (transcript) are free today. Lower-case `h` stays help. Inside the transcript view only scroll keys, `t`/`Esc` (close), `?`/`h` (help) and `q`/`Ctrl+C` (quit) act; the filter and sort keys are ignored there rather than changing a table the user cannot see.

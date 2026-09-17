@@ -7,6 +7,7 @@ import type {
 	SubagentStatus,
 } from '../index.ts';
 import { visibleRows } from './rows.ts';
+import { type TranscriptItem, transcriptLines } from './transcript.ts';
 
 export type SubRow = {
 	id: string;
@@ -34,6 +35,8 @@ export type Row = {
 	updatedAt?: number;
 	activity: SessionActivity;
 	closed: boolean;
+	/** Loaded from history rather than seen live. Always `closed`. */
+	history: boolean;
 	subagents: SubRow[];
 };
 
@@ -53,6 +56,17 @@ export type ViewState = {
 	detail: boolean;
 	help: boolean;
 	showClosed: boolean;
+	/** `loading` asks the driver to read history once; its `history` event moves to `on`. */
+	history: 'off' | 'loading' | 'on';
+	/** Open while set. The driver streams the session's events into `items`. */
+	transcript?: {
+		sessionId: string;
+		items: readonly TranscriptItem[];
+		/** Index of the first line shown. */
+		scroll: number;
+		/** Stay at the end as items arrive. Cleared by scrolling up, set again at the end. */
+		follow: boolean;
+	};
 	/** `origin` is the provider id, or the event whose listener threw. */
 	lastError?: { origin: string; message: string };
 	quit: boolean;
@@ -99,6 +113,8 @@ export type ViewEvent =
 	| { type: 'subagent'; name: 'start' | 'end'; subagent: SubagentLike; session: SessionLike }
 	| { type: 'subagents'; sessionId: string; list: SubagentLike[] }
 	| { type: 'ready'; live: SessionLike[] }
+	| { type: 'history'; sessions: SessionLike[] }
+	| { type: 'transcript:append'; sessionId: string; items: TranscriptItem[] }
 	| { type: 'error'; origin: string; message: string }
 	| { type: 'resize'; cols: number; rows: number };
 
@@ -119,6 +135,7 @@ export function initialState(opts: {
 	cols: number;
 	rows: number;
 	showClosed?: boolean;
+	history?: boolean;
 }): ViewState {
 	return {
 		ready: false,
@@ -130,6 +147,7 @@ export function initialState(opts: {
 		detail: false,
 		help: false,
 		showClosed: opts.showClosed ?? false,
+		history: opts.history ? 'loading' : 'off',
 		quit: false,
 		cols: opts.cols,
 		rows: opts.rows,
@@ -160,6 +178,7 @@ function snapshot(session: SessionLike, prev?: Row): Row {
 			tool: session.activity.tool ? { ...session.activity.tool } : undefined,
 		},
 		closed: false,
+		history: false,
 		subagents: prev?.subagents ?? [],
 	};
 }
@@ -205,7 +224,28 @@ export function normalize(state: ViewState): ViewState {
 	if (selectedIndex >= scroll + height) scroll = selectedIndex - height + 1;
 	scroll = Math.max(0, Math.min(scroll, Math.max(0, rows.length - height)));
 	const detail = state.detail && selectedId != null;
-	return { ...state, selectedId, selectedIndex, scroll, detail };
+	return anchorTranscript({ ...state, selectedId, selectedIndex, scroll, detail });
+}
+
+/** Keep the transcript's scroll inside its lines, and at the end while following. */
+function anchorTranscript(state: ViewState): ViewState {
+	const t = state.transcript;
+	if (!t) return state;
+	const last = Math.max(0, transcriptLines(t.items, state.cols).length - bodyHeight(state));
+	const scroll = t.follow ? last : Math.min(Math.max(t.scroll, 0), last);
+	if (scroll === t.scroll) return state;
+	return { ...state, transcript: { ...t, scroll } };
+}
+
+function scrollTranscript(
+	state: ViewState,
+	to: (scroll: number, last: number) => number,
+): ViewState {
+	const t = state.transcript;
+	if (!t) return state;
+	const last = Math.max(0, transcriptLines(t.items, state.cols).length - bodyHeight(state));
+	const scroll = Math.min(Math.max(to(t.scroll, last), 0), last);
+	return { ...state, transcript: { ...t, scroll, follow: scroll >= last } };
 }
 
 export function applyEvent(state: ViewState, event: ViewEvent): ViewState {
@@ -246,6 +286,25 @@ export function applyEvent(state: ViewState, event: ViewEvent): ViewState {
 			for (const s of event.live) sessions.set(s.id, snapshot(s, state.sessions.get(s.id)));
 			const fresh = state.ready ? {} : { selectedId: undefined, selectedIndex: 0, scroll: 0 };
 			return normalize({ ...state, ...fresh, sessions, ready: true });
+		}
+		case 'history': {
+			if (state.history === 'off') return state;
+			const sessions = new Map(state.sessions);
+			for (const s of event.sessions) {
+				const prev = sessions.get(s.id);
+				// A live row, or one that closed while we watched, knows more than history does.
+				if (prev && !prev.history) continue;
+				sessions.set(s.id, { ...snapshot(s, prev), pid: undefined, closed: true, history: true });
+			}
+			return normalize({ ...state, sessions, history: 'on' });
+		}
+		case 'transcript:append': {
+			const t = state.transcript;
+			if (!t || t.sessionId !== event.sessionId || event.items.length === 0) return state;
+			return anchorTranscript({
+				...state,
+				transcript: { ...t, items: [...t.items, ...event.items] },
+			});
 		}
 		case 'error':
 			return { ...state, lastError: { origin: event.origin, message: event.message } };
@@ -289,6 +348,22 @@ export function applyKey(input: ViewState, key: Key): ViewState {
 	}
 
 	const page = bodyHeight(state);
+
+	if (state.transcript) {
+		const char = typeof key === 'object' ? key.char : undefined;
+		if (key === 'escape' || char === 't') return { ...state, transcript: undefined };
+		if (key === 'up' || char === 'k') return scrollTranscript(state, (s) => s - 1);
+		if (key === 'down' || char === 'j') return scrollTranscript(state, (s) => s + 1);
+		if (key === 'pageup') return scrollTranscript(state, (s) => s - page);
+		if (key === 'pagedown') return scrollTranscript(state, (s) => s + page);
+		if (key === 'home') return scrollTranscript(state, () => 0);
+		if (key === 'end') return scrollTranscript(state, (_s, last) => last);
+		if (char === '?' || char === 'h') return { ...state, help: true };
+		if (char === 'q') return { ...state, quit: true };
+		// Sort, filter and the rest act on a table that is not on screen.
+		return state;
+	}
+
 	switch (key) {
 		case 'up':
 			return move(state, -1);
@@ -328,6 +403,17 @@ export function applyKey(input: ViewState, key: Key): ViewState {
 			return { ...state, prompt: state.filter };
 		case 'c':
 			return normalize({ ...state, showClosed: !state.showClosed });
+		case 'H': {
+			if (state.history === 'off') return { ...state, history: 'loading' };
+			const sessions = new Map([...state.sessions].filter(([, row]) => !row.history));
+			return normalize({ ...state, sessions, history: 'off' });
+		}
+		case 't':
+			if (state.selectedId == null) return state;
+			return {
+				...state,
+				transcript: { sessionId: state.selectedId, items: [], scroll: 0, follow: true },
+			};
 		case '?':
 		case 'h':
 			return { ...state, help: true };

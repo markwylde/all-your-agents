@@ -5,7 +5,7 @@ import { parseArgs, USAGE } from '../../src/cli/args.js';
 test('no flags opens the TUI', () => {
 	assert.deepEqual(parseArgs([]), {
 		ok: true,
-		args: { mode: 'tui', all: false, help: false, version: false },
+		args: { mode: 'tui', all: false, history: false, help: false, version: false },
 	});
 });
 
@@ -35,6 +35,7 @@ test('usage lists every flag and key', () => {
 		'--once',
 		'--json',
 		'--all',
+		'--history',
 		'--help',
 		'--version',
 		'Enter',

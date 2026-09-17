@@ -36,10 +36,16 @@ function compare(a: Row, b: Row, key: ViewState['sort']['key']): number {
 	}
 }
 
+/** Live rows always; rows that closed during this run with `c`; history rows while history is on. */
+export function isShown(row: Row, state: ViewState): boolean {
+	if (!row.closed) return true;
+	return row.history ? state.history !== 'off' : state.showClosed;
+}
+
 /** Sessions to show, filtered and sorted, in display order. */
 export function visibleRows(state: ViewState): Row[] {
 	const rows = [...state.sessions.values()].filter(
-		(row) => (state.showClosed || !row.closed) && matchesFilter(row, state.filter),
+		(row) => isShown(row, state) && matchesFilter(row, state.filter),
 	);
 	rows.sort((a, b) => {
 		const c = compare(a, b, state.sort.key);

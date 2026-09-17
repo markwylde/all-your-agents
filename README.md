@@ -38,13 +38,15 @@ node ./demo/watch.ts         # stream session events as they happen (Ctrl+C to s
 
 ## CLI
 
-`all-your-agents` is `top` for coding agents. It lists every live session, puts the ones waiting on you first, and updates as they change.
+`all-your-agents` is `top` for coding agents. It lists every live session, puts the ones waiting on you first, and updates as they change. Press `H` for every session on the machine, finished ones included, and `t` to read what any of them said.
 
 ```sh
 npx all-your-agents            # full-screen live view
 npx all-your-agents --once     # print a table and exit (also when piped)
 npx all-your-agents --json     # print live sessions as JSON and exit
 npx all-your-agents --all      # also show sessions that close while it is open
+npx all-your-agents --history  # start with every session, not only live ones
+npx all-your-agents --json --history   # every session as JSON, live ones first
 ```
 
 | Key | Action |
@@ -54,10 +56,12 @@ npx all-your-agents --all      # also show sessions that close while it is open
 | `/` | Filter by title, folder, harness, model, or pid. `Esc` clears |
 | `s` `>` / `<`, `r` | Next / previous sort column, reverse |
 | `c` | Show or hide closed sessions |
+| `H` | Show or hide history: every session the providers know, in the same table |
+| `t` | Transcript of the selected session: prompts, replies, tools, outcomes. Follows a live session. `t` or `Esc` closes |
 | `?` `h` | Help |
 | `q` `Ctrl+C` | Quit and restore the terminal |
 
-The screen redraws only when an agent changes, a key is pressed, or the terminal resizes. Times are clock times (`14:31:02`), not ticking durations, so nothing runs on a timer. `NO_COLOR` is honoured.
+The screen redraws only when an agent changes, a key is pressed, or the terminal resizes. History is read once when you press `H`; a transcript is one event stream, closed when you leave it. Times are clock times (`14:31:02`), not ticking durations, so nothing runs on a timer. `NO_COLOR` is honoured.
 
 ## Session object
 
@@ -67,7 +71,7 @@ Live sessions have a `pid`. Historical ones do not. `kind` is `interactive` or `
 import type { Session, SessionActivity, Subagent, Turn, SessionEvent } from 'all-your-agents';
 ```
 
-`session.activity` is the current or last turn (`tool`, `lastTurn`, `error`, `openSubagents`), separate from `status`. `session.subagents()` lists launched subagents. `transcript()` yields `Turn`s; `events()` tails normalized `SessionEvent`s (`user`, `assistant`, `tool`, `tool-result`, `title`, `turn-end`, `subagent`, `subagent-end`, `error`, `other`). Each item keeps the original record on `raw`.
+`session.activity` is the current or last turn (`tool`, `lastTurn`, `error`, `openSubagents`), separate from `status`. `session.subagents()` lists launched subagents. `transcript()` yields `Turn`s; `events()` tails normalized `SessionEvent`s until you stop iterating or call `close()` on it (both work while it is waiting) (`user`, `assistant`, `tool`, `tool-result`, `title`, `turn-end`, `subagent`, `subagent-end`, `error`, `other`). Each item keeps the original record on `raw`.
 
 **Title precedence**, highest first: `user` (custom title) > `harness` (generated) > `process` (session-file name) > `prompt` (first real user prompt). `session:update` fires only when the effective title, cwd, or model changes.
 

@@ -1,8 +1,9 @@
 import { fit, type Style, sanitize, style, truncate, width } from './ansi.ts';
 import { COMMAND } from './args.ts';
 import { clockTime, folder, longTime, shortTime, statusText, subCount, value } from './format.ts';
-import { liveCounts, visibleRows } from './rows.ts';
+import { isShown, liveCounts, visibleRows } from './rows.ts';
 import { bodyHeight, type Row, type SortKey, type ViewState } from './state.ts';
+import { transcriptLines } from './transcript.ts';
 
 export type RenderOptions = {
 	now: number;
@@ -141,10 +142,15 @@ function headerLine(state: ViewState, opts: RenderOptions): string {
 	}
 	if (state.filter) {
 		const shown = visibleRows(state).length;
-		const total = [...state.sessions.values()].filter((r) => state.showClosed || !r.closed).length;
+		const total = [...state.sessions.values()].filter((r) => isShown(r, state)).length;
 		left.push(`filter: ${sanitize(state.filter)} ${shown}/${total}`);
 	}
 	if (state.showClosed) left.push(style('+closed', ['dim'], c));
+	if (state.history === 'loading') left.push(style('loading history…', ['dim'], c));
+	if (state.history === 'on') {
+		const n = [...state.sessions.values()].filter((r) => r.history).length;
+		left.push(style(`+history (${n})`, ['dim'], c));
+	}
 	const right = `updated ${clockTime(opts.now)} `;
 	const plainLeft = left.map((s) => s.replace(SGR, '')).join('  ');
 	const spaceFor = state.cols - width(plainLeft) - width(right);
@@ -295,6 +301,8 @@ const HELP = [
 	'   s >  <          Next / previous sort column',
 	'   r               Reverse sort order',
 	'   c               Show or hide closed sessions',
+	'   H               Show or hide history: every session, not only live ones',
+	'   t               Transcript of the selected session (t or Esc closes)',
 	'   ? h             Close this help',
 	'   q  Ctrl+C       Quit',
 	'',
@@ -313,9 +321,11 @@ function footerLine(state: ViewState, opts: RenderOptions): string {
 	}
 	const hints = state.help
 		? ' ? close help   q quit'
-		: state.detail
-			? ' ⏎/Esc close details   ↑↓ select   q quit'
-			: ' ↑↓ select  ⏎ details  / filter  s sort  r reverse  c closed  ? help  q quit';
+		: state.transcript
+			? ` ↑↓ scroll  PgUp PgDn page  Home End  t/Esc close  q quit${state.transcript.follow ? '   following' : ''}`
+			: state.detail
+				? ' ⏎/Esc close details   t transcript   ↑↓ select   q quit'
+				: ' ↑↓ select  ⏎ details  t transcript  H history  / filter  s sort  c closed  ? help  q quit';
 	return style(hints, ['dim'], c);
 }
 
@@ -331,6 +341,15 @@ export function renderLines(state: ViewState, opts: RenderOptions): string[] {
 	if (state.help) {
 		lines.push(style(fit(' Help', cols), ['inverse'], opts.color));
 		body = HELP;
+	} else if (state.transcript) {
+		const t = state.transcript;
+		const title = value(state.sessions.get(t.sessionId)?.title);
+		lines.push(style(fit(` Transcript · ${title}`, cols), ['inverse'], opts.color));
+		const all = transcriptLines(t.items, cols);
+		body =
+			all.length === 0
+				? [style('  No records yet.', ['dim'], opts.color)]
+				: all.slice(t.scroll, t.scroll + height).map((l) => style(l.text, l.style, opts.color));
 	} else if (state.detail && state.selectedId) {
 		const row = state.sessions.get(state.selectedId);
 		lines.push(style(fit(` ${value(row?.title)}`, cols), ['inverse'], opts.color));
