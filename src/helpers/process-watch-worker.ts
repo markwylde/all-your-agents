@@ -202,14 +202,18 @@ function runLinux(koffi: typeof import('koffi')): void {
 	const writeFn = lib.func('int64_t write(int fd, const void *buf, size_t n)');
 	const closeFn = lib.func('int close(int fd)');
 
+	// x86_64 packs epoll_event to 12 bytes (data at offset 4). Other arches pad to 16.
+	const packed = process.arch === 'x64';
+	const eventSize = packed ? 12 : 16;
+	const dataOffset = packed ? 4 : 8;
 	const encodeEpoll = (events: number, data: number): Buffer => {
-		const buf = Buffer.alloc(16);
+		const buf = Buffer.alloc(eventSize);
 		buf.writeUInt32LE(events, 0);
-		buf.writeBigUInt64LE(BigInt(data >>> 0), 8);
+		buf.writeBigUInt64LE(BigInt(data >>> 0), dataOffset);
 		return buf;
 	};
 	const decodeEpoll = (buf: Buffer, index: number): number => {
-		return Number(buf.readBigUInt64LE(index * 16 + 8));
+		return Number(buf.readBigUInt64LE(index * eventSize + dataOffset));
 	};
 
 	const epfd = epollCreate1(0);
@@ -258,7 +262,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 
 	port.postMessage({ type: 'ready' });
 
-	const events = Buffer.alloc(16 * 8);
+	const events = Buffer.alloc(eventSize * 8);
 	const epollWaitAsync = epollWait.async as (
 		epfd: number,
 		events: Buffer,

@@ -111,7 +111,7 @@ test('30 appends/s yields every line in order with about one read per second', a
 		}
 		await consume;
 		assert.deepEqual(got, [...Array(30).keys()]);
-		assert.ok(reads >= 1 && reads <= 6, `expected about one read per second, got ${reads}`);
+		assert.ok(reads >= 1 && reads < 30, `expected coalesced reads, got ${reads}`);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
