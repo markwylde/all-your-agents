@@ -1,6 +1,6 @@
 {
   "name": "all-your-agents",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Event-driven, harness-neutral API for live coding-agent sessions",
   "type": "module",
   "main": "./dist/index.js",
