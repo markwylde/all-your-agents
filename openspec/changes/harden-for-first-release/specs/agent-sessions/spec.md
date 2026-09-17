@@ -1,11 +1,15 @@
 ## MODIFIED Requirements
 
 ### Requirement: Instance lifecycle
-The system SHALL create an instance from a list of providers and optional `{ fs, processes, debounce: { quietMs, maxLatencyMs } }` overrides. Nothing is watched until `start()` is called. `start()` and `stop()` SHALL each be idempotent. After `stop()` resolves, no further events SHALL be emitted and every watch, file and process, SHALL be released. `stop()` SHALL forget every session that was live, together with its titles and subagents, so that a later `start()` catches up exactly as a new instance would.
+The system SHALL create an instance from a list of providers and optional `{ fs, processes, debounce: { quietMs, maxLatencyMs } }` overrides. Nothing is watched until `start()` is called. `start()` and `stop()` SHALL each be idempotent. After `stop()` resolves, no further events SHALL be emitted and every watch, file and process, SHALL be released. `stop()` SHALL forget every session that was live, together with its titles and subagents, so that a later `start()` catches up exactly as a new instance would. `stop()` called while `start()` is still in progress SHALL wait for it and then release everything it opened.
 
 #### Scenario: Stop releases watches
 - **WHEN** `stop()` resolves after a successful `start()`
 - **THEN** no further events are emitted and every file and process watch is released
+
+#### Scenario: Stop during start
+- **WHEN** `stop()` is called before `start()` has resolved
+- **THEN** both resolve, no watch is left open, and `running()` is empty
 
 #### Scenario: Restart catches up again
 - **WHEN** an instance is stopped while a live session has a running subagent, and `start()` is then called again

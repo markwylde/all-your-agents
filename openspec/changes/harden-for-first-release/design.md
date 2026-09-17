@@ -87,6 +87,17 @@ When servicing an event finds the entry gone, the helper also stats the director
 ### 13. Cleanups ride along only where the fix touches the code
 Removed: `staleFiles`, `Bound.stale`, `Bound.activity`, the empty `else if` in `handleRecord`, the no-op `system` subtype chain in `mapRecord`, `void toolResultText`, and the duplicate `contentOf`/`textOf` in `activity.ts` (exported from `journal.ts` instead). Stale files need no bookkeeping: `parseSessionFile` already rejects a file whose process is dead.
 
+### 14. Session file events run through a per-file queue
+Found while fixing the leaked watches: `bind` awaits the filesystem, and the watcher started a new task per event, so a rewrite or removal of the same file could overtake a bind in progress. That bound one session twice or brought a removed one back, each time leaving watches behind (the intermittent test-process hang). The provider now chains the work for each session file path on a promise, and every attach re-checks `bound.released` after an await. A failure inside a queued task goes to `ctx.reportError`. The unbounded `pending` array of settled promises goes away with it.
+
+Alternative: keep events concurrent and re-validate after every await. Rejected: every new await becomes a new place to forget the check; ordering removes the class.
+
+### 15. `stop()` waits for a `start()` in flight
+`start()` hands its unwatch functions over only when each provider's `watch()` resolves, so a `stop()` that ran in between released nothing. `stop()` now marks the instance closed immediately (events stop), awaits the start, then unwatches. `start()` after that awaits the stop.
+
+### 16. Live sessions get a `prompt` title
+`list` derived a title from the first prompt; the live path never did, so the same session had a title in history and none while live. Both now share `promptTitle()`.
+
 ## Risks / Trade-offs
 
 - [`prepack` makes `npm test` rebuild `dist` inside the pack test] → `dist` is only read by that test and the e2e suite; the rebuild is idempotent.
@@ -94,3 +105,4 @@ Removed: `staleFiles`, `Bound.stale`, `Bound.activity`, the empty `else if` in `
 - [An extra `stat` of the directory on each deleted entry] → one syscall in direct response to a notification, allowed by ADR 0001.
 - [Evicting closed sessions changes `get()` for a watch-only provider after 1000 closes] → specified; providers with `list` are unaffected.
 - [Renaming the `error` payload breaks anyone on a git install] → nothing is published.
+- [macOS: an established `fs.watch` can drop an event when another watch opens or closes at that moment] → Measured here at 6 dropped of 200 under adversarial timing, 0 of 200 without churn. libuv serves all watches from one FSEvents stream and rebuilds it on every change. A dropped session-file rewrite leaves a status stale until the next rewrite. Out of scope for this change because it needs a design decision consistent with ADR 0001 (for example re-statting watched entries once, in response to the library's own "a watch was opened" event, or kqueue vnode watches through the existing optional `koffi`). The tests wait 50 ms after opening watches before writing, as the existing helper tests already did.

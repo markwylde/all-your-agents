@@ -34,6 +34,37 @@ test('list excludes subagent journals and prefers custom-title', async () => {
 	}
 });
 
+test('list takes model from the last assistant record that names a real one', async () => {
+	const home = await mkdtemp(join(tmpdir(), 'aya-list-'));
+	try {
+		const dir = join(home, 'projects', encodeProjectDir('/tmp/app'));
+		await mkdir(dir, { recursive: true });
+		const assistant = (model: string) => ({
+			type: 'assistant',
+			sessionId: ID,
+			message: { model, content: [{ type: 'text', text: 'ok' }] },
+		});
+		const records = [
+			{ type: 'user', sessionId: ID, cwd: '/tmp/app', message: { content: 'prompt' } },
+			assistant('claude-sonnet-5'),
+			assistant('claude-opus-5'),
+			assistant('<synthetic>'),
+		];
+		await writeFile(
+			join(dir, `${ID}.jsonl`),
+			`${records.map((r) => JSON.stringify(r)).join('\n')}\n`,
+		);
+		const aya = AllYourAgents({
+			providers: [claudeCode({ home })],
+			processes: { info: async () => ({ alive: false }), watch: () => 'unsupported' },
+		});
+		assert.equal((await aya.sessions())[0]?.model, 'claude-opus-5');
+		assert.equal((await aya.get(ID))?.model, 'claude-opus-5');
+	} finally {
+		await rm(home, { recursive: true, force: true });
+	}
+});
+
 test('events() tails appends and break closes the watch', async () => {
 	const home = await mkdtemp(join(tmpdir(), 'aya-ins-'));
 	try {

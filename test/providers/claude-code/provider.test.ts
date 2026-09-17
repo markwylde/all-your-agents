@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFile, mkdir, mkdtemp, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -8,67 +8,11 @@ import { AllYourAgents } from '../../../src/index.js';
 import { claudeCode } from '../../../src/providers/claude-code/index.js';
 import { encodeProjectDir } from '../../../src/providers/claude-code/paths.js';
 import type { Session } from '../../../src/types.js';
-import { sleep, waitFor } from '../../util/wait.js';
+import { settle, sleep, waitFor } from '../../util/wait.js';
+import { fakeProcesses, journal, sessionFile } from './home.js';
 
 const ID_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const ID_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-
-function fakeProcesses(start = Date.now() - 1000) {
-	const alive = new Map<number, { alive: boolean; startTime: number }>();
-	const exits = new Map<number, () => void>();
-	const processes: Processes & {
-		fire(pid: number): void;
-		set(pid: number, a: boolean, t?: number): void;
-	} = {
-		async info(pid) {
-			return alive.get(pid) ?? { alive: false };
-		},
-		watch(pid, onExit) {
-			exits.set(pid, onExit);
-			return {
-				stop() {
-					exits.delete(pid);
-				},
-			};
-		},
-		fire(pid) {
-			exits.get(pid)?.();
-		},
-		set(pid, a, t = start) {
-			if (a) alive.set(pid, { alive: true, startTime: t });
-			else alive.delete(pid);
-		},
-	};
-	return processes;
-}
-
-async function sessionFile(
-	home: string,
-	pid: number,
-	over: Record<string, unknown>,
-	start: number,
-): Promise<void> {
-	await mkdir(join(home, 'sessions'), { recursive: true });
-	await writeFile(
-		join(home, 'sessions', `${pid}.json`),
-		JSON.stringify({
-			pid,
-			startedAt: start,
-			status: 'idle',
-			cwd: '/tmp/app',
-			...over,
-		}),
-	);
-}
-
-async function journal(home: string, cwd: string, id: string, records: unknown[]): Promise<void> {
-	const dir = join(home, 'projects', encodeProjectDir(cwd));
-	await mkdir(dir, { recursive: true });
-	await writeFile(
-		join(dir, `${id}.jsonl`),
-		`${records.map((r) => JSON.stringify(r)).join('\n')}\n`,
-	);
-}
 
 test('two sessions in one cwd bind separately; key sibling never read', async () => {
 	const home = await mkdtemp(join(tmpdir(), 'aya-cc-'));
@@ -100,6 +44,7 @@ test('two sessions in one cwd bind separately; key sibling never read', async ()
 		aya.on('session:create', (s) => ids.push(s.id));
 		aya.on('session:open', (s) => ids.push(`open:${s.id}`));
 		await aya.start();
+		await settle();
 		assert.deepEqual(new Set(ids), new Set([ID_A, ID_B]));
 		assert.equal(
 			reads.some((p) => p.endsWith('.key')),
@@ -133,6 +78,7 @@ test('open vs create; status and cwd in one write; switch; unlink', async () => 
 		aya.on('session:update', (s) => events.push(`update:${s.cwd}`));
 		aya.on('session:close', (s) => events.push(`close:${s.id}:${s.pid ?? ''}`));
 		await aya.start();
+		await settle();
 		assert.ok(events.includes(`open:${ID_A}`));
 		await sessionFile(home, 9, { sessionId: ID_A, cwd: '/tmp/other', status: 'idle' }, start);
 		await waitFor(
@@ -165,6 +111,7 @@ test('kill -9 via exit event and via reconcile; stale rewrite; clock does not cl
 		aya.on('session:close', (s) => closes.push(s.id));
 		aya.on('session:create', (s: Session) => closes.push(`create:${s.id}`));
 		await aya.start();
+		await settle();
 		procs.set(4, false);
 		procs.fire(4);
 		await waitFor(() => closes.includes(ID_A));
@@ -195,6 +142,7 @@ test('kill -9 via exit event and via reconcile; stale rewrite; clock does not cl
 		const closes: string[] = [];
 		aya.on('session:close', (s) => closes.push(s.id));
 		await aya.start();
+		await settle();
 		procs2.set(5, false);
 		await aya.reconcile(5);
 		await waitFor(() => closes.includes(ID_A));
@@ -226,6 +174,7 @@ test('print-mode journal is headless history only', async () => {
 		const live: string[] = [];
 		aya.on('session:create', (s) => live.push(s.id));
 		await aya.start();
+		await settle();
 		assert.deepEqual(live, []);
 		const listed = await aya.sessions({ kind: 'headless', since: 0 });
 		assert.equal(listed[0]?.id, ID_A);
@@ -274,6 +223,7 @@ test('a reply split into records plus turn_duration and idle ends the turn once'
 				ends.push(`${s.activity.lastTurn}@${s.activity.lastTurnEndedAt}`);
 		});
 		await aya.start();
+		await settle();
 
 		await sessionFile(home, 7, { sessionId: ID_A, cwd, status: 'busy' }, start);
 		await append([
@@ -348,6 +298,7 @@ async function bindIdleWithHistory(records: (t: (ms: number) => string) => unkno
 		);
 		aya = AllYourAgents({ providers: [claudeCode({ home })], processes: procs });
 		await aya.start();
+		await settle();
 		return aya.running()[0]?.activity;
 	} finally {
 		await aya?.stop();

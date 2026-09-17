@@ -38,6 +38,8 @@ export function isInjectedText(text: string): boolean {
 		text.startsWith('<system-reminder>') ||
 		text.startsWith('<command-name>') ||
 		text.startsWith('<local-command-') ||
+		// `!` shell mode: the command the user ran and its output, not a prompt.
+		text.startsWith('<bash-') ||
 		text.startsWith('<task-notification>')
 	);
 }
@@ -91,8 +93,16 @@ export function modelOf(rec: unknown): string | undefined {
 	return typeof model === 'string' && model && model !== SYNTHETIC_MODEL ? model : undefined;
 }
 
-/** The title a session takes from its first real prompt. */
+/**
+ * The title a session takes from its first real prompt. A slash command that runs a
+ * turn is recorded as `<command-message>` markup; its title is the command as typed.
+ */
 export function promptTitle(text: string): string {
+	if (text.startsWith('<command-message>')) {
+		const name = /<command-name>([^<]*)<\/command-name>/.exec(text)?.[1]?.trim();
+		const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(text)?.[1]?.trim();
+		if (name) return (args ? `${name} ${args}` : name).slice(0, 200);
+	}
 	return text.slice(0, 200);
 }
 

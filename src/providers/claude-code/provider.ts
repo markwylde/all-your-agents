@@ -412,13 +412,8 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		const journal = parsed.cwd
 			? await resolveJournal(ctx.fs, homeOf(), parsed.sessionId, parsed.cwd)
 			: await resolveJournal(ctx.fs, homeOf(), parsed.sessionId);
-		// Unwatched, or this pid bound by a newer event, while the journal was being found.
+		// Unwatched while the journal was being found.
 		if (!ctx || closed) return;
-		const raced = bounds.get(parsed.pid);
-		if (raced) {
-			await rewrite(raced, parsed);
-			return;
-		}
 		const bound: Bound = {
 			pid: parsed.pid,
 			filePath,
@@ -527,6 +522,25 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		}
 	};
 
+	/**
+	 * Events for one session file are serviced strictly in order. Binding awaits the
+	 * filesystem, and a second event for the same file overtaking it (a rewrite, or the
+	 * file's removal) would bind the session twice or bring a removed one back.
+	 */
+	const queues = new Map<string, Promise<void>>();
+	const inOrder = (path: string, task: () => Promise<void>): Promise<void> => {
+		const next = (queues.get(path) ?? Promise.resolve())
+			.then(task)
+			.catch((error: unknown) => {
+				if (!closed) ctx?.reportError(error);
+			})
+			.finally(() => {
+				if (queues.get(path) === next) queues.delete(path);
+			});
+		queues.set(path, next);
+		return next;
+	};
+
 	const serviceFile = async (path: string): Promise<void> => {
 		if (!ctx) return;
 		const name = basename(path);
@@ -571,27 +585,26 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			closed = false;
 			const home = homeOf();
 			const dir = sessionsDir(home);
-			const pending: Promise<void>[] = [];
 			const watcher = watchCtx.watchDir(dir, (event) => {
 				if (closed) return;
-				if (event.type === 'delete') {
-					const pid = Number(basename(event.path).replace(/\.json$/, ''));
-					const bound = bounds.get(pid);
-					if (bound) {
-						emitClose(bound);
-						teardown(bound);
+				void inOrder(event.path, async () => {
+					if (closed) return;
+					if (event.type === 'delete') {
+						const pid = Number(basename(event.path).replace(/\.json$/, ''));
+						const bound = bounds.get(pid);
+						if (bound) {
+							emitClose(bound);
+							teardown(bound);
+						}
+						return;
 					}
-					return;
-				}
-				pending.push(
-					(async () => {
-						await serviceFile(event.path);
-						if (processWatchUnsupported) await revalidate();
-					})(),
-				);
+					await serviceFile(event.path);
+					if (processWatchUnsupported) await revalidate();
+				});
 			});
 			await watcher.ready;
-			await Promise.all(pending);
+			// The initial scan has queued every session file already there.
+			await Promise.all(queues.values());
 			return () => {
 				closed = true;
 				watcher.close();

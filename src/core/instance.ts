@@ -110,6 +110,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 
 	let started = false;
 	let startPromise: Promise<void> | undefined;
+	let stopPromise: Promise<void> | undefined;
 	let catchingUp = false;
 	let closed = false;
 
@@ -593,6 +594,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			return api;
 		},
 		async start() {
+			if (stopPromise) await stopPromise;
 			if (startPromise) return startPromise;
 			closed = false;
 			started = true;
@@ -614,22 +616,28 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			return startPromise;
 		},
 		async stop() {
+			if (stopPromise) return stopPromise;
 			if (!started && !startPromise) return;
 			closed = true;
 			started = false;
-			const pending = unwatches.splice(0);
-			for (const unwatch of pending) {
-				try {
-					await unwatch();
-				} catch {
-					// ignore
+			stopPromise = (async () => {
+				// A start still in flight holds watches it has not handed over yet.
+				await startPromise;
+				for (const unwatch of unwatches.splice(0)) {
+					try {
+						await unwatch();
+					} catch {
+						// ignore
+					}
 				}
-			}
-			for (const id of live.keys()) forget(id);
-			live.clear();
-			await createdProcesses?.close();
-			startPromise = undefined;
-			catchingUp = false;
+				for (const id of live.keys()) forget(id);
+				live.clear();
+				await createdProcesses?.close();
+				startPromise = undefined;
+				catchingUp = false;
+				stopPromise = undefined;
+			})();
+			return stopPromise;
 		},
 		async reconcile(pid) {
 			if (!started) return;

@@ -18,25 +18,31 @@
 - [x] 3.2 Make `attachSession` the single session builder, remove the `live` branch of `snapshotToSession`, and simplify the merge in `sessions()`; add a test that a live session has identical own keys from an event, `running()`, `sessions()` and `get()`
 - [x] 3.3 Make `stop()` forget live sessions' titles and subagents; add a test that stop then start re-emits `subagent:start` with `catchUp: true`
 - [x] 3.4 Bound `history` to the 1000 most recently closed sessions, evicting titles and subagents with it; add a test that closes 1001 memory-provider sessions and checks `get()` for the oldest and newest
+- [x] 3.5 Make `stop()` wait for a `start()` still in flight, and `start()` for a `stop()`; add a test that stops during start and finds no watch open
 
 ## 4. Watch helpers
 
-- [ ] 4.1 Add the `backlog: 'separate'` option and `backlog` promise to `tailJsonl`, and thread it through `TailJsonlFn` and `makeWatchCtx`; add a test with a counting `Fs` proving the initial bytes are read once and iteration yields only appends
-- [ ] 4.2 Decode with a streaming `TextDecoder` in `tailJsonl`, reset on truncation; add a test that splits a multi-byte character across two appends
-- [ ] 4.3 Open the watch before the initial scan in `watchDir`, skip already-known names in the scan, and fall back to the ancestor watch when `fs.watch` throws; add a test using an `Fs` wrapper that creates an entry during `readDir` and expects exactly one create
-- [ ] 4.4 Re-arm `watchDir` when the watched directory is removed; add a test that removes and re-creates the directory and sees the delete then the new create
-- [ ] 4.5 Never open a watch after `close()`: re-check `closed` after every await in `watchDir` before calling `fs.watch`; add a test that closes during the initial scan and asserts no watch handle is left open
+- [x] 4.1 Add the `backlog: 'separate'` option and `backlog` promise to `tailJsonl`, and thread it through `TailJsonlFn` and `makeWatchCtx`; add a test with a counting `Fs` proving the initial bytes are read once and iteration yields only appends
+- [x] 4.2 Decode with a streaming `TextDecoder` in `tailJsonl`, reset on truncation; add a test that splits a multi-byte character across two appends
+- [x] 4.3 Open the watch before the initial scan in `watchDir`, skip already-known names in the scan, and fall back to the ancestor watch when `fs.watch` throws; add a test using an `Fs` wrapper that creates an entry during `readDir` and expects exactly one create
+- [x] 4.4 Re-arm `watchDir` when the watched directory is removed; add a test that removes and re-creates the directory and sees the delete then the new create
+- [x] 4.5 Never open a watch after `close()`: re-check `closed` after every await in `watchDir` before calling `fs.watch`; add a test that closes during the initial scan and asserts no watch handle is left open
+- [x] 4.6 Make every re-arm in `watchDir` re-resolve the real target, so an intermediate directory that appears is waited through rather than watched as the target; add a test with two missing levels
+- [x] 4.7 Surface a read failure in `tailJsonl` as an iteration error instead of an unhandled rejection; add a test with an `Fs` whose `readRange` rejects
 
 ## 5. Claude Code provider
 
-- [ ] 5.1 Seed from `tail.backlog` and handle iterated records as live, deleting the separate whole-file read and the `skipping` counter; add a provider test with a counting `Fs` asserting the journal is read once at bind and an appended record is handled once
-- [ ] 5.2 Wrap per-record handling in the root and child tail loops with `ctx.reportError`; add a provider test where a listener-independent failure on one record is reported and a later tool-use record still sets `activity.tool`
-- [ ] 5.3 Add `modelOf` to `journal.ts`, emit `model` at seed and on live assistant records, and include `model` in `list` snapshots; add tests for bind, mid-session switch, `<synthetic>`, and history listing
-- [ ] 5.4 Remove `staleFiles`, `Bound.stale`, `Bound.activity`, the empty branch in `handleRecord`, the no-op `system` chain in `mapRecord`, and the duplicated `contentOf`/`textOf` in `activity.ts`; verify the captured-journal fixture test output is unchanged
-- [ ] 5.5 Never attach a journal, subagents directory or child tail to a session that was torn down while the attach was awaiting (found as an intermittent test-process hang from a leaked watch); add a provider test with a slow `Fs` that stops mid-bind and asserts every watch handle is closed; verify `provider.test.js` exits cleanly 20 times in a row
+- [x] 5.1 Seed from `tail.backlog` and handle iterated records as live, deleting the separate whole-file read and the `skipping` counter; add a provider test with a counting `Fs` asserting the journal is read once at bind and an appended record is handled once
+- [x] 5.2 Wrap per-record handling in the root and child tail loops with `ctx.reportError`; add a provider test where a listener-independent failure on one record is reported and a later tool-use record still sets `activity.tool`
+- [x] 5.3 Add `modelOf` to `journal.ts`, emit `model` at seed and on live assistant records, and include `model` in `list` snapshots; add tests for bind, mid-session switch, `<synthetic>`, and history listing
+- [x] 5.4 Remove `staleFiles`, `Bound.stale`, `Bound.activity`, the empty branch in `handleRecord`, the no-op `system` chain in `mapRecord`, and the duplicated `contentOf`/`textOf` in `activity.ts`; verify the captured-journal fixture test output is unchanged
+- [x] 5.5 Never attach a journal, subagents directory or child tail to a session that was torn down while the attach was awaiting (found as an intermittent test-process hang from a leaked watch); add a provider test with a slow `Fs` that stops mid-bind and asserts every watch handle is closed; verify `provider.test.js` exits cleanly 20 times in a row
+- [x] 5.6 Service each session file's events in order through a per-path queue and drop the unbounded `pending` array; add provider tests for a file removed mid-bind and a process exiting mid-backlog
+- [x] 5.7 Report the first real prompt as a `prompt` title for live sessions, sharing `promptTitle()` with `list`; verify in the bind test that a live session with no generated title is titled by its prompt
+- [x] 5.8 Title a slash-command prompt as typed (`/name args`) and treat shell-mode (`<bash-…>`) records as injected, after finding both in real journals; verify with the new `journal.test.ts` cases
 
 ## 6. Verify
 
-- [ ] 6.1 Run `npm run lint` and `npm test`; verify both pass with no new skips
-- [ ] 6.2 Run `node dist/cli/main.js --json` against the real `~/.claude`; verify a live session that has replied shows a `model`
-- [ ] 6.3 Run `openspec validate harden-for-first-release --strict`; verify it passes
+- [x] 6.1 Run `npm run lint` and `npm test`; verify both pass with no new skips
+- [x] 6.2 Run `node dist/cli/main.js --json` against the real `~/.claude`; verify a live session that has replied shows a `model`
+- [x] 6.3 Run `openspec validate harden-for-first-release --strict`; verify it passes

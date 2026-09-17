@@ -83,9 +83,11 @@ import type { Session, SessionActivity, Subagent, Turn, SessionEvent } from 'all
 | `session:close` | The process no longer holds it. `pid` is unset; history remains. |
 | `subagent:start` / `subagent:end` | A subagent launched or finished. |
 | `ready` | Catch-up from `start()` finished. |
-| `error` | A provider threw. Payload `{ provider, error }`. Never thrown. |
+| `error` | A provider failed (`{ source: 'provider', provider, error }`) or one of your listeners threw (`{ source: 'listener', event, error }`). Never thrown into the library. |
 
 Subscribe before `start()`. Catch-up events carry `{ catchUp: true }`, then `ready`, then `{ catchUp: false }`.
+
+A listener that throws never stops updates. Register an `error` listener to receive the failure; without one it is rethrown asynchronously as an uncaught exception, so it is never lost.
 
 ## Query
 
@@ -96,7 +98,7 @@ await aya.get(id);
 await aya.reconcile(pid); // one-shot re-validation; never schedules
 ```
 
-`since` is epoch ms matched against `updatedAt` (fallback `startedAt`). `kind` is `interactive` | `headless`. `sessions()` works without `start()`.
+`since` is epoch ms matched against `updatedAt` (fallback `startedAt`). `kind` is `interactive` | `headless`. `sessions()` works without `start()`. `transcript()`, `events()` and `subagents()` are always served by the provider named in `session.provider`. Closed sessions stay in memory for the 1000 most recent; older ones come from their provider's history.
 
 ## Options
 
@@ -117,7 +119,7 @@ Provider id `claude-code`, harness `ClaudeCode`. Home is `$CLAUDE_CONFIG_DIR` if
 
 Live index: `<home>/sessions/<pid>.json`. Journals: `<home>/projects/<encoded-cwd>/<id>.jsonl`. Every non-alphanumeric character in the cwd becomes `-`, so `/Users/me/app/.claude/worktrees/x` is `-Users-me-app--claude-worktrees-x`.
 
-Status: `busy` → `running`, `waiting` → `waiting`, `idle`/`shell` → `idle`. Unknown words omit `status`. `.key` files and the messaging socket are never opened.
+Status: `busy` → `running`, `waiting` → `waiting`, `idle`/`shell` → `idle`. Unknown words omit `status`. `model` is the model of the latest assistant record in the journal. `.key` files and the messaging socket are never opened.
 
 ## Testing kit
 

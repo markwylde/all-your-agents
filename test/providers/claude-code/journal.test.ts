@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createLocalFs } from '../../../src/helpers/fs.js';
-import { mapRecord, resolveJournal } from '../../../src/providers/claude-code/journal.js';
+import { turnFactsFromRecord } from '../../../src/providers/claude-code/activity.js';
+import {
+	mapRecord,
+	modelOf,
+	promptTitle,
+	resolveJournal,
+} from '../../../src/providers/claude-code/journal.js';
 
 test('mapper tables', () => {
 	assert.equal(mapRecord({ type: 'user', message: { content: '<system-reminder>x' } }).length, 0);
@@ -34,6 +40,40 @@ test('mapper tables', () => {
 	);
 	const user = mapRecord({ type: 'user', message: { content: 'hello' } });
 	assert.equal(user[0]?.kind, 'user');
+});
+
+test('shell-mode records are not prompts', () => {
+	for (const content of ['<bash-input>ls</bash-input>', '<bash-stdout>a\nb</bash-stdout>']) {
+		assert.deepEqual(mapRecord({ type: 'user', message: { content } }), []);
+		assert.deepEqual(turnFactsFromRecord({ type: 'user', message: { content } }), []);
+	}
+});
+
+test('a slash command that runs a turn is a prompt, titled as it was typed', () => {
+	const content =
+		'<command-message>opsx:propose</command-message>\n<command-name>/opsx:propose</command-name>\n<command-args>add a  history view</command-args>';
+	assert.equal(mapRecord({ type: 'user', message: { content } })[0]?.kind, 'user');
+	assert.deepEqual(turnFactsFromRecord({ type: 'user', message: { content } }), [
+		{ type: 'turn-started', at: undefined },
+	]);
+	assert.equal(promptTitle(content), '/opsx:propose add a  history view');
+	assert.equal(
+		promptTitle('<command-message>init</command-message>\n<command-name>/init</command-name>'),
+		'/init',
+	);
+	assert.equal(promptTitle('x'.repeat(500)).length, 200);
+	assert.equal(promptTitle('plain prompt'), 'plain prompt');
+});
+
+test('modelOf reads assistant records only and ignores the synthetic placeholder', () => {
+	assert.equal(
+		modelOf({ type: 'assistant', message: { model: 'claude-opus-5' } }),
+		'claude-opus-5',
+	);
+	assert.equal(modelOf({ type: 'assistant', message: { model: '<synthetic>' } }), undefined);
+	assert.equal(modelOf({ type: 'user', message: { model: 'claude-opus-5' } }), undefined);
+	assert.equal(modelOf({ type: 'assistant' }), undefined);
+	assert.equal(modelOf(null), undefined);
 });
 
 test('journal resolution: derived, lookup, ambiguity, sidechain', async () => {
