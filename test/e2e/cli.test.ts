@@ -91,6 +91,7 @@ test('prompt-arg, close, resume uuid, continue: events + listing', async (t) => 
 			assert.ok(closed, 'get() lost history after close');
 			assert.equal(closed.pid, undefined);
 			assert.ok((await collectTurns(closed)).some((text) => text.includes('ONE')));
+			await new Promise((r) => setTimeout(r, 1000));
 
 			const resume = startBackgroundClaude(
 				home,
