@@ -5,6 +5,7 @@ import { measureCost } from './cost.js';
 import {
 	isolatedGrokHome,
 	liveEnabled,
+	requireGrok,
 	rmQuiet,
 	startPrintGrok,
 	stubProcesses,
@@ -17,6 +18,7 @@ test('grok -p: three general-purpose subagents start and end', async (t) => {
 		t.skip('set AYA_LIVE=1 and OPENROUTER_API_KEY');
 		return;
 	}
+	requireGrok();
 	await measureCost('grok three subagents', async () => {
 		const { home, cwd } = await isolatedGrokHome();
 		const aya = AllYourAgents({
