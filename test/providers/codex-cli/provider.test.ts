@@ -290,6 +290,34 @@ test('revert suffix relocates without close or second create', async () => {
 	});
 });
 
+test('closed exec session remains in history for sessions({ since })', async () => {
+	await withHome(async (home) => {
+		const start = Date.now() - 1000;
+		const procs = fakeCodexProcesses(start);
+		procs.set(3, true, start);
+		const path = rolloutPath(home, A);
+		await writeRollout(path, [
+			sessionMeta(A, { source: 'exec', originator: 'codex_exec' }),
+			eventMsg('task_started'),
+		]);
+		procs.hold(3, path);
+		const aya = AllYourAgents({
+			providers: [codexCli({ home })],
+			processes: procs,
+			debounce: { quietMs: 10 },
+		});
+		await aya.start();
+		await waitFor(() => aya.running().some((s) => s.id === A && s.kind === 'headless'));
+		assert.ok(aya.running()[0]?.startedAt != null);
+		procs.fire(3);
+		await waitFor(() => aya.running().length === 0);
+		const since = Date.now() - 60_000;
+		const listed = await aya.sessions({ since });
+		assert.ok(listed.some((s) => s.id === A && s.harness === 'Codex' && s.kind === 'headless'));
+		await aya.stop();
+	});
+});
+
 test('stale file later held by a new process rebinds', async () => {
 	await withHome(async (home) => {
 		const start = Date.now() - 1000;

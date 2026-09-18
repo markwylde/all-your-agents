@@ -52,8 +52,9 @@ function envelopePayload(raw: unknown): Record<string, unknown> | undefined {
 	return undefined;
 }
 
-function sourceKind(source: unknown): SessionKind {
+function sourceKind(source: unknown, originator?: string): SessionKind {
 	if (source === 'exec' || source === 'mcp') return 'headless';
+	if (originator === 'codex_exec') return 'headless';
 	return 'interactive';
 }
 
@@ -89,10 +90,11 @@ export function parseSessionMeta(bytes: Uint8Array): SessionMeta | undefined {
 		!parentThreadId &&
 		!(threadSource && NOT_ROOT_THREAD.has(threadSource)) &&
 		!isSubagentSource(payload.source);
+	const originator = typeof payload.originator === 'string' ? payload.originator : undefined;
 	const out: SessionMeta = {
 		id,
 		cwd,
-		kind: sourceKind(payload.source),
+		kind: sourceKind(payload.source, originator),
 		root,
 	};
 	if (typeof payload.session_id === 'string') out.sessionId = payload.session_id;

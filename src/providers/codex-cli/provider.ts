@@ -486,6 +486,7 @@ export function codexCli(options: PathOptions = {}): Provider {
 			pid,
 			cwd: bound.cwd,
 			kind: meta.kind,
+			startedAt: meta.timestamp,
 		});
 		acquireProcess(bound);
 		await attach(bound, path, true);

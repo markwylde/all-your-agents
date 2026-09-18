@@ -42,6 +42,10 @@ test('parses root, subagent, fork, and rejects recycled pid', () => {
 	assert.equal(parseSessionMeta(encodeUtf8('not json\n')), undefined);
 	assert.equal(acceptMeta(root, { alive: true }), true);
 	assert.equal(parseSessionMeta(bytes(sessionMeta(A, { source: 'exec' })))?.kind, 'headless');
+	assert.equal(
+		parseSessionMeta(bytes(sessionMeta(A, { originator: 'codex_exec' })))?.kind,
+		'headless',
+	);
 	const oversized = encodeUtf8(`{"pad":"${'x'.repeat(SESSION_META_MAX_BYTES)}"}`);
 	assert.ok(oversized.byteLength > SESSION_META_MAX_BYTES);
 	assert.equal(parseSessionMeta(oversized), undefined);
