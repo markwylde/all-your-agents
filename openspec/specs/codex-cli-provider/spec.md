@@ -21,7 +21,7 @@ The provider SHALL treat a root rollout file as live only while a process curren
 
 A rollout is a file matching `sessions/YYYY/MM/DD/rollout-*.jsonl`. Compressed `*.jsonl.zst` files SHALL NOT be opened. A rollout is a root only when `session_meta` has no `parent_thread_id` and `thread_source` is not `subagent`, `guardian_review`, or `memory_consolidation`. User forks (`forked_from_id` set, no `parent_thread_id`) SHALL still be roots.
 
-Codex defers creating a new rollout until the thread's first items are written (`deferred_creation` in `rollout/src/recorder.rs`), so a freshly launched Codex with no prompt yet has no file and SHALL NOT be a session. A resumed thread opens its existing rollout for append without writing to it, so no filesystem notification fires until its first append: a resume that happens before `watch` starts SHALL be found by the start probe, and a resume that happens afterwards SHALL be bound on that rollout's first change notification. The provider SHALL NOT probe on a timer to find it sooner.
+Codex defers creating a new rollout until the thread's first items are written (`deferred_creation` in `rollout/src/recorder.rs`), so a freshly launched Codex with no prompt yet has no file and SHALL NOT be a session. A resumed thread reopens its existing rollout for append and keeps that handle open (Codex 0.155 appends `thread_settings_applied` at resume). On macOS a directory watch reports no change for writes through a held handle until it closes, so the day directories alone never reveal a live resume. The provider SHALL also watch each of the 64 most recently modified plain rollouts as a file, SHALL add a rollout to that set when it is created or its session closes, and SHALL drop it when the file is deleted. A resume that happens before `watch` starts SHALL be found by the start probe, and a resume that happens afterwards SHALL be bound on that rollout's first change notification. A resume of an older rollout outside the watched set is seen when its process exits. The provider SHALL NOT probe on a timer to find it sooner. Its own watches hold rollout files open, so `holders` and `heldUnder` SHALL never report the observing process.
 
 #### Scenario: Open file is live
 - **WHEN** a Codex process has `sessions/2026/09/18/rollout-…-<id>.jsonl` open and that file's `session_meta` has no `parent_thread_id`
@@ -46,6 +46,14 @@ Codex defers creating a new rollout until the thread's first items are written (
 #### Scenario: Resumed after start
 - **WHEN** a process resumes an old rollout after `watch` started
 - **THEN** `session:open` fires on that rollout's first append, not before, and no timer is armed to find it sooner
+
+#### Scenario: Resumed after start through a held handle
+- **WHEN** a process holds a recent rollout open and appends to it through that handle, after `watch` started
+- **THEN** `session:open` fires without the handle being closed
+
+#### Scenario: Observer holds the file too
+- **WHEN** the observing process has a watch or read handle open on a rollout
+- **THEN** it is not reported by `holders` or `heldUnder`, and is never bound as a session pid
 
 #### Scenario: Exec children ignored
 - **WHEN** `process_manager/chat_processes.json` lists osPids for shell commands

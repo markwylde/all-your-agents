@@ -92,9 +92,10 @@ test('process exits while the journal is being read: closed, no session watch', 
 		await aya.start();
 		await waitFor(() => events.includes('close'));
 		await sleep(40);
-		assert.equal(
-			fs.openWatches().some((w) => w.endsWith('.jsonl')),
-			false,
+		// The tail is gone; only the watch that notices a later resume remains.
+		assert.deepEqual(
+			fs.openWatches().filter((w) => w.endsWith('.jsonl')),
+			[path],
 		);
 		await aya.stop();
 		assert.deepEqual(fs.openWatches(), []);

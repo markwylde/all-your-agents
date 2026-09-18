@@ -179,3 +179,32 @@ test('holders and heldUnder see a child with a file open, and arm no timer', asy
 		await rm(dir, { recursive: true, force: true });
 	}
 });
+
+test('holders and heldUnder never report this process', async () => {
+	const { mkdtemp, writeFile, rm, open } = await import('node:fs/promises');
+	const { watch } = await import('node:fs');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const dir = await mkdtemp(join(tmpdir(), 'aya-self-'));
+	const file = join(dir, 'rollout.jsonl');
+	await writeFile(file, '{}\n');
+	// A file watch is an open fd on macOS; a read handle is one everywhere.
+	const watcher = watch(file);
+	const handle = await open(file, 'r');
+	const procs = createLocalProcesses({ koffi: false });
+	try {
+		const holders = procs.holders;
+		const heldUnder = procs.heldUnder;
+		assert.ok(holders && heldUnder);
+		assert.equal((await holders(file)).includes(process.pid), false);
+		assert.equal(
+			(await heldUnder(dir)).some((row) => row.pid === process.pid),
+			false,
+		);
+	} finally {
+		watcher.close();
+		await handle.close();
+		await procs.close();
+		await rm(dir, { recursive: true, force: true });
+	}
+});

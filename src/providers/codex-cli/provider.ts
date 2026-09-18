@@ -58,6 +58,9 @@ type Bound = {
 const HARNESS = 'Codex';
 const PROVIDER = 'codex-cli';
 
+/** Recent rollouts that get their own file watch, so a resume is seen while it is live. */
+const RESUME_WATCH_LIMIT = 64;
+
 function isDatePart(name: string, depth: number): boolean {
 	return depth === 0 ? /^\d{4}$/.test(name) : /^\d{2}$/.test(name);
 }
@@ -73,6 +76,8 @@ export function codexCli(options: PathOptions = {}): Provider {
 	const notRoots = new Set<string>();
 	const knownThreads = new Set<string>();
 	const dirWatches = new Map<string, { close(): void; ready?: Promise<void> }>();
+	/** Most recently used last. See `watchForResume`. */
+	const resumeWatches = new Map<string, { close(): void }>();
 	const knownPaths = new Map<string, string>();
 	let catchUp = false;
 
@@ -154,6 +159,56 @@ export function codexCli(options: PathOptions = {}): Provider {
 		}
 		teardown(bound);
 		ctx?.emit('session:close', { id: bound.id });
+		const path = bound.path;
+		void ctx?.fs.stat(path).then((st) => {
+			if (st) watchForResume(path);
+		});
+	};
+
+	/**
+	 * A resumed thread appends through a handle Codex keeps open. On macOS a directory
+	 * watch (FSEvents) reports nothing for that until the handle closes, so the day
+	 * directory never tells us about a resume while it is live. A watch on the file
+	 * itself (kqueue) fires on every write, so keep one on each recent rollout, bounded.
+	 */
+	const watchForResume = (path: string): void => {
+		if (!ctx || closed) return;
+		const existing = resumeWatches.get(path);
+		if (existing) {
+			resumeWatches.delete(path);
+			resumeWatches.set(path, existing);
+			return;
+		}
+		let handle: ReturnType<WatchContext['fs']['watch']>;
+		try {
+			handle = ctx.fs.watch(path);
+		} catch {
+			return;
+		}
+		resumeWatches.set(path, handle);
+		const threadId = parseRolloutName(basename(path))?.threadId;
+		void (async () => {
+			try {
+				for await (const event of handle) {
+					if (closed) break;
+					if (event.type === 'rename' && !(await ctx?.fs.stat(path).catch(() => null))) {
+						handle.close();
+						break;
+					}
+					if (!primed) continue;
+					if (threadId && bounds.has(threadId)) continue;
+					void inOrder(() => onRollout(path));
+				}
+			} catch {
+				// ended
+			}
+			if (resumeWatches.get(path) === handle) resumeWatches.delete(path);
+		})();
+		while (resumeWatches.size > RESUME_WATCH_LIMIT) {
+			const [oldest, h] = resumeWatches.entries().next().value as [string, { close(): void }];
+			h.close();
+			resumeWatches.delete(oldest);
+		}
 	};
 
 	const consume = (bound: Bound, tail: Tail, handle: (rec: unknown) => void): void => {
@@ -586,10 +641,13 @@ export function codexCli(options: PathOptions = {}): Provider {
 			}
 			if (!isRolloutName(event.name)) return;
 			if (event.type === 'delete') {
+				resumeWatches.get(event.path)?.close();
+				resumeWatches.delete(event.path);
 				void inOrder(() => onDelete(event.path));
 				return;
 			}
 			if (!primed) return;
+			watchForResume(event.path);
 			void inOrder(() => onRollout(event.path));
 		});
 		dirWatches.set(path, handle);
@@ -663,9 +721,13 @@ export function codexCli(options: PathOptions = {}): Provider {
 				if (dirWatches.size === n) break;
 			}
 			try {
-				for (const file of await listRolloutFiles(watchCtx.fs, homeOf())) {
-					knownThreads.add(file.threadId);
-				}
+				const files = await listRolloutFiles(watchCtx.fs, homeOf());
+				for (const file of files) knownThreads.add(file.threadId);
+				const recent = files
+					.filter((file) => !file.compressed)
+					.sort((a, b) => (a.mtimeMs ?? 0) - (b.mtimeMs ?? 0))
+					.slice(-RESUME_WATCH_LIMIT);
+				for (const file of recent) watchForResume(file.path);
 			} catch {
 				// history may be empty
 			}
@@ -693,6 +755,8 @@ export function codexCli(options: PathOptions = {}): Provider {
 				index.close();
 				for (const h of dirWatches.values()) h.close();
 				dirWatches.clear();
+				for (const h of resumeWatches.values()) h.close();
+				resumeWatches.clear();
 				for (const bound of [...bounds.values()]) teardown(bound);
 				for (const entry of pidWatches.values()) entry.handle?.stop();
 				pidWatches.clear();

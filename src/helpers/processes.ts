@@ -126,15 +126,19 @@ export function createLocalProcesses(
 				},
 			};
 		},
+		// Our own watches and reads hold these files too (kqueue watches are fds), and
+		// this process is never a harness, so it is never reported as a holder.
 		async holders(path) {
-			if (platform() === 'darwin') return macHolders(path);
-			if (platform() === 'linux') return linuxHolders(path);
-			return [];
+			let pids: number[] = [];
+			if (platform() === 'darwin') pids = await macHolders(path);
+			else if (platform() === 'linux') pids = await linuxHolders(path);
+			return pids.filter((pid) => pid !== process.pid);
 		},
 		async heldUnder(directory) {
-			if (platform() === 'darwin') return macHeldUnder(directory);
-			if (platform() === 'linux') return linuxHeldUnder(directory);
-			return [];
+			let held: FileHolder[] = [];
+			if (platform() === 'darwin') held = await macHeldUnder(directory);
+			else if (platform() === 'linux') held = await linuxHeldUnder(directory);
+			return held.filter((row) => row.pid !== process.pid);
 		},
 		async close() {
 			watchers.clear();
