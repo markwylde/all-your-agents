@@ -10,6 +10,7 @@ export type {
 	DebounceOptions,
 	DirChange,
 	FileChange,
+	FileHolder,
 	Fs,
 	FsStat,
 	FsWatchEvent,

@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile, readlink } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { platform } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { Worker } from 'node:worker_threads';
-import type { Processes, ProcessInfo, ProcessWatchResult } from './types.ts';
+import type { FileHolder, Processes, ProcessInfo, ProcessWatchResult } from './types.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -125,6 +126,16 @@ export function createLocalProcesses(
 				},
 			};
 		},
+		async holders(path) {
+			if (platform() === 'darwin') return macHolders(path);
+			if (platform() === 'linux') return linuxHolders(path);
+			return [];
+		},
+		async heldUnder(directory) {
+			if (platform() === 'darwin') return macHeldUnder(directory);
+			if (platform() === 'linux') return linuxHeldUnder(directory);
+			return [];
+		},
 		async close() {
 			watchers.clear();
 			retire();
@@ -193,4 +204,112 @@ async function linuxInfo(pid: number): Promise<ProcessInfo> {
 	} catch {
 		return { alive: false };
 	}
+}
+
+const LSOF_OPTS = { maxBuffer: 32 * 1024 * 1024, timeout: 15_000 };
+
+function parseLsofPids(stdout: string): number[] {
+	const pids = new Set<number>();
+	for (const line of stdout.split('\n')) {
+		if (line.startsWith('p')) {
+			const pid = Number(line.slice(1));
+			if (Number.isInteger(pid) && pid > 0) pids.add(pid);
+		}
+	}
+	return [...pids];
+}
+
+function stripPrivate(path: string): string {
+	return path.startsWith('/private/') ? path.slice('/private'.length) : path;
+}
+
+function parseLsofHolders(stdout: string, prefix: string): FileHolder[] {
+	const out: FileHolder[] = [];
+	let pid = 0;
+	const root = stripPrivate(prefix);
+	const rootSlash = root.endsWith('/') ? root : `${root}/`;
+	for (const line of stdout.split('\n')) {
+		if (line.startsWith('p')) {
+			pid = Number(line.slice(1));
+			continue;
+		}
+		if (!line.startsWith('n') || !Number.isInteger(pid) || pid <= 0) continue;
+		const path = line.slice(1);
+		const normalized = stripPrivate(path);
+		if (normalized !== root && !normalized.startsWith(rootSlash)) continue;
+		if (!normalized.endsWith('.jsonl')) continue;
+		out.push({ path: normalized, pid });
+	}
+	return out;
+}
+
+async function macHolders(path: string): Promise<number[]> {
+	try {
+		const { stdout } = await execFileAsync('lsof', ['-nP', '-F', 'p', '--', path], LSOF_OPTS);
+		return parseLsofPids(stdout);
+	} catch (error) {
+		const code = (error as { status?: number }).status;
+		if (code === 1) return [];
+		return [];
+	}
+}
+
+async function macHeldUnder(directory: string): Promise<FileHolder[]> {
+	try {
+		const { stdout } = await execFileAsync('lsof', ['-nP', '-F', 'pn'], LSOF_OPTS);
+		return parseLsofHolders(stdout, directory);
+	} catch (error) {
+		const code = (error as { status?: number }).status;
+		if (code === 1) return [];
+		return [];
+	}
+}
+
+async function linuxFdTargets(pid: string): Promise<string[]> {
+	const dir = join('/proc', pid, 'fd');
+	let names: string[];
+	try {
+		names = await readdir(dir);
+	} catch {
+		return [];
+	}
+	const out: string[] = [];
+	for (const name of names) {
+		try {
+			out.push(await readlink(join(dir, name)));
+		} catch {
+			// gone
+		}
+	}
+	return out;
+}
+
+async function linuxPids(): Promise<string[]> {
+	try {
+		return (await readdir('/proc')).filter((name) => /^\d+$/.test(name));
+	} catch {
+		return [];
+	}
+}
+
+async function linuxHolders(path: string): Promise<number[]> {
+	const pids: number[] = [];
+	for (const pid of await linuxPids()) {
+		const targets = await linuxFdTargets(pid);
+		if (targets.includes(path)) pids.push(Number(pid));
+	}
+	return pids;
+}
+
+async function linuxHeldUnder(directory: string): Promise<FileHolder[]> {
+	const prefix = directory.endsWith('/') ? directory : `${directory}/`;
+	const out: FileHolder[] = [];
+	for (const pid of await linuxPids()) {
+		for (const target of await linuxFdTargets(pid)) {
+			if ((target === directory || target.startsWith(prefix)) && target.endsWith('.jsonl')) {
+				out.push({ path: target, pid: Number(pid) });
+			}
+		}
+	}
+	return out;
 }

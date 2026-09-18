@@ -291,3 +291,81 @@ export function startPrintGrok(
 
 export const THREE_GROK_AGENT_PROMPT =
 	'You MUST call spawn_subagent exactly 3 times in this turn, in parallel, each with subagent_type=general-purpose and no background. Prompts: (1) Reply with only the word ALPHA. (2) Reply with only the word BETA. (3) Reply with only the word GAMMA. Wait for all three results, then output DONE.';
+
+export function e2eCodexModel(): string {
+	return process.env.AYA_E2E_CODEX_MODEL ?? 'x-ai/grok-4.6';
+}
+
+export async function isolatedCodexHome(): Promise<{ home: string; cwd: string }> {
+	const home = await mkdtemp(join(tmpdir(), 'aya-e2e-codex-'));
+	const cwd = await mkdtemp(join(tmpdir(), 'aya-e2e-cwd-'));
+	writeFileSync(
+		join(home, 'config.toml'),
+		[
+			`model = ${JSON.stringify(e2eCodexModel())}`,
+			'model_provider = "openrouter"',
+			'approval_policy = "never"',
+			'sandbox_mode = "danger-full-access"',
+			'',
+			'[model_providers.openrouter]',
+			'name = "OpenRouter"',
+			'base_url = "https://openrouter.ai/api/v1"',
+			'env_key = "OPENROUTER_API_KEY"',
+			'wire_api = "responses"',
+			'',
+		].join('\n'),
+	);
+	return { home, cwd };
+}
+
+export function codexEnv(home: string): NodeJS.ProcessEnv {
+	const key = process.env.OPENROUTER_API_KEY;
+	if (!key) throw new Error('OPENROUTER_API_KEY is missing');
+	return { ...process.env, CODEX_HOME: home, OPENROUTER_API_KEY: key };
+}
+
+export function requireCodex(): void {
+	const probe = spawnSync('codex', ['--version'], { encoding: 'utf8' });
+	if (probe.status !== 0) {
+		throw new Error(
+			`codex is not installed or not on PATH: ${probe.error?.message ?? probe.stderr}`,
+		);
+	}
+}
+
+export function startExecCodex(
+	home: string,
+	cwd: string,
+	prompt: string,
+): { child: ChildProcess; done: Promise<{ code: number | null; output: string }> } {
+	const child = spawn(
+		'codex',
+		[
+			'exec',
+			'-s',
+			'danger-full-access',
+			'--dangerously-bypass-approvals-and-sandbox',
+			'-m',
+			e2eCodexModel(),
+			'-C',
+			cwd,
+			prompt,
+		],
+		{ cwd, env: codexEnv(home), stdio: ['ignore', 'pipe', 'pipe'] },
+	);
+	let output = '';
+	child.stdout?.on('data', (chunk: Buffer) => {
+		output += chunk.toString();
+	});
+	child.stderr?.on('data', (chunk: Buffer) => {
+		output += chunk.toString();
+	});
+	const done = new Promise<{ code: number | null; output: string }>((resolve) => {
+		child.on('exit', (code) => resolve({ code, output }));
+		child.on('error', () => resolve({ code: null, output }));
+	});
+	return { child, done };
+}
+
+export const THREE_CODEX_AGENT_PROMPT =
+	'Spawn three collab agents in parallel. Each must reply with only one word: ALPHA, BETA, and GAMMA. Wait until all three finish, then output DONE.';

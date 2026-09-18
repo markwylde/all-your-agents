@@ -1,0 +1,12 @@
+[
+	{ "kind": "user", "text": "scrubbed prompt" },
+	{ "kind": "tool", "id": "c1", "name": "exec" },
+	{ "kind": "tool-result", "id": "c1" },
+	{ "kind": "turn-end", "outcome": "completed" },
+	{ "kind": "turn-end", "outcome": "interrupted" },
+	{ "kind": "error", "message": "synthetic api error" },
+	{ "kind": "turn-end", "outcome": "failed" },
+	{ "kind": "subagent", "id": "00000000-0000-4000-8000-0000000000c1" },
+	{ "kind": "subagent-end", "id": "00000000-0000-4000-8000-0000000000c1", "status": "completed" },
+	{ "kind": "turn-end", "outcome": "completed" }
+]

@@ -1,4 +1,5 @@
 export { createClaudeFixtureDriver } from './claude-driver.ts';
+export { createCodexFixtureDriver } from './codex-driver.ts';
 export type { FixtureDriver } from './driver.ts';
 export { createGrokFixtureDriver } from './grok-driver.ts';
 export { defineConformanceTests } from './kit.ts';

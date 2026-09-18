@@ -18,11 +18,13 @@ test('npm pack installs and imports both entry points', async (t) => {
 		const tgz = execFileSync('sh', ['-c', 'ls *.tgz'], { cwd: dir, encoding: 'utf8' }).trim();
 		execFileSync('npm', ['init', '-y'], { cwd: dir, stdio: 'pipe' });
 		execFileSync('npm', ['install', join(dir, tgz)], { cwd: dir, stdio: 'pipe' });
-		const src = `import aya, { builtInProviders, grokBuild } from '@markwylde/all-your-agents';
-import { createGrokFixtureDriver, defineConformanceTests } from '@markwylde/all-your-agents/testing';
-if (builtInProviders.length !== 2) throw new Error('providers');
+		const src = `import aya, { builtInProviders, grokBuild, codexCli } from '@markwylde/all-your-agents';
+import { createGrokFixtureDriver, createCodexFixtureDriver, defineConformanceTests } from '@markwylde/all-your-agents/testing';
+if (builtInProviders.length !== 3) throw new Error('providers');
 if (!builtInProviders.some((p) => p.id === 'grok-build')) throw new Error('grok');
+if (!builtInProviders.some((p) => p.id === 'codex-cli')) throw new Error('codex');
 if (typeof grokBuild !== 'function' || typeof createGrokFixtureDriver !== 'function') throw new Error('grok exports');
+if (typeof codexCli !== 'function' || typeof createCodexFixtureDriver !== 'function') throw new Error('codex exports');
 if (typeof aya !== 'function') throw new Error('default');
 if (typeof defineConformanceTests !== 'function') throw new Error('testing');
 `;
@@ -40,6 +42,7 @@ if (typeof defineConformanceTests !== 'function') throw new Error('testing');
 				...process.env,
 				CLAUDE_CONFIG_DIR: join(dir, 'claude-home'),
 				GROK_HOME: join(dir, 'grok-home'),
+				CODEX_HOME: join(dir, 'codex-home'),
 			},
 		});
 		assert.deepEqual(JSON.parse(json), []);

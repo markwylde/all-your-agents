@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { installTimerGuard } from '../../src/helpers/no-timers.js';
 import { createLocalProcesses } from '../../src/helpers/processes.js';
@@ -118,5 +118,64 @@ test('close() waits for the worker so the process can exit without aborting', as
 			timeout: 10_000,
 		});
 		assert.equal(result.status, 0, `delay ${delay}: ${result.stderr.slice(0, 300)}`);
+	}
+});
+
+test('claude and grok providers do not call holders', async () => {
+	const { readdirSync, readFileSync, statSync } = await import('node:fs');
+	const { dirname, join } = await import('node:path');
+	const { fileURLToPath } = await import('node:url');
+	const src = join(dirname(fileURLToPath(import.meta.url)), '../../src/providers');
+	const walk = (dir: string): string[] => {
+		const out: string[] = [];
+		for (const name of readdirSync(dir)) {
+			const full = join(dir, name);
+			if (statSync(full).isDirectory()) out.push(...walk(full));
+			else if (full.endsWith('.ts')) out.push(full);
+		}
+		return out;
+	};
+	for (const name of ['claude-code', 'grok-build']) {
+		for (const file of walk(join(src, name))) {
+			assert.equal(/holders|heldUnder/.test(readFileSync(file, 'utf8')), false, file);
+		}
+	}
+});
+
+test('holders and heldUnder see a child with a file open, and arm no timer', async () => {
+	const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const dir = await mkdtemp(join(tmpdir(), 'aya-hold-'));
+	const file = join(dir, 'rollout.jsonl');
+	await writeFile(file, '{}\n');
+	const child = spawn(
+		process.execPath,
+		['-e', `require('fs').openSync(${JSON.stringify(file)}, 'r'); setInterval(() => {}, 1e6)`],
+		{ stdio: 'ignore' },
+	);
+	const procs = createLocalProcesses({ koffi: false });
+	const guard = installTimerGuard();
+	try {
+		assert.ok(child.pid);
+		const holders = procs.holders;
+		const heldUnder = procs.heldUnder;
+		assert.ok(holders && heldUnder);
+		let pids: number[] = [];
+		const started = Date.now();
+		while (Date.now() - started < 3000) {
+			pids = await holders(file);
+			if (child.pid != null && pids.includes(child.pid)) break;
+			await new Promise((r) => setTimeout(r, 50));
+		}
+		assert.ok(child.pid != null && pids.includes(child.pid), `holders ${pids.join(',')}`);
+		const under = await heldUnder(dir);
+		assert.ok(under.some((row) => row.pid === child.pid && row.path === file));
+		guard.assertIdle();
+	} finally {
+		guard.restore();
+		child.kill();
+		await procs.close();
+		await rm(dir, { recursive: true, force: true });
 	}
 });

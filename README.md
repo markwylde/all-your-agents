@@ -8,6 +8,7 @@ Watch every coding agent on this machine, and inspect the sessions they leave be
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Claude Code | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ¹ |
 | Grok Build | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ² | 🟠 ³ | 🟢 | 🟢 | 🟢 | 🟠 ⁴ |
+| Codex CLI | 🟢 | 🟢 | 🔴 ⁵ | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
 
 🟢 full · 🟠 partial · 🔴 none. Subagents covers start, end, background and nested.
 
@@ -15,6 +16,7 @@ Watch every coding agent on this machine, and inspect the sessions they leave be
 2. Grok's `tool_started` carries no call id, so the current tool is identified by name. Two tools with the same name running at once show as one.
 3. A failed turn is reported as `failed`, but Grok records no error message for it, so `activity.error` is usually empty.
 4. `grok -p` registers as live only when `GROK_TRACK_HEADLESS` is set. Otherwise it appears in history only.
+5. Codex does not persist approval requests, so a session blocked on an approval reads as `running`. A launched Codex with no prompt yet has no rollout. A `/resume` after watch started appears on its first append. A VS Code thread unloaded without touching another file stays listed until the next event for that pid.
 
 ## Usage
 
@@ -143,11 +145,19 @@ Status: `busy` → `running`, `waiting` → `waiting`, `idle`/`shell` → `idle`
 
 ## Grok Build
 
-Provider id `grok-build`, harness `Grok`. Home is `$GROK_HOME` if set, otherwise `~/.grok`, overridable via `grokBuild({ home })`. Both built-ins are in `builtInProviders`; pass `providers: [claudeCode()]` to watch Claude Code only.
+Provider id `grok-build`, harness `Grok`. Home is `$GROK_HOME` if set, otherwise `~/.grok`, overridable via `grokBuild({ home })`. All three built-ins are in `builtInProviders`; pass `providers: [claudeCode()]` to watch Claude Code only.
 
 Live index: `<home>/active_sessions.json`, an array of `{ session_id, pid, cwd, opened_at }`. One pid can hold several sessions. `grok -p` registers only when `GROK_TRACK_HEADLESS` is set; otherwise print-mode runs appear in history with `kind` `headless`. Sessions: `<home>/sessions/<encoded-cwd>/<id>/`. The cwd is percent-encoded like Rust `urlencoding` (everything but `A-Za-z0-9-._~`, so `/tmp/foo(bar)!` is `%2Ftmp%2Ffoo%28bar%29%21`); a cwd whose encoding exceeds 255 bytes is found by a one-level lookup for the session id.
 
 Status comes from `events.jsonl`, Grok's phase log: `waiting_for_model`, `streaming_text`, `streaming_reasoning`, `tool_execution` → `running`; `permission_prompt` → `waiting` (with the tool named by `permission_requested`); no open turn → `idle`. Unknown phases omit `status`. Titles and `model` come from `summary.json`, the conversation from `chat_history.jsonl`, subagents from `subagents/<id>/meta.json`. `active_sessions.lock`, `*.tmp`, `auth.json`, `updates.jsonl` and the session-search sqlite are never opened.
+
+## Codex CLI
+
+Provider id `codex-cli`, harness `Codex`. Home is `$CODEX_HOME` if set, otherwise `~/.codex`, overridable via `codexCli({ home })`. VS Code Codex sessions that share that home are the same provider.
+
+Live sessions are rollout files a process currently has open: `<home>/sessions/YYYY/MM/DD/rollout-<timestamp>-<thread-id>.jsonl`. There is no pid index. Status comes from persisted turn lifecycle events: `task_started` → `running`; `task_complete` / `turn_aborted` → `idle`. Codex does not persist approvals, so `waiting` is never reported. Titles come from `session_index.jsonl` then the first user prompt; the conversation from `response_item` records; subagents from child rollouts with `parent_thread_id`. A compressed `.jsonl.zst` thread is listed only when `session_index.jsonl` has a title for it, so compressed children are not treated as sessions (an unnamed compressed root is omitted). `auth.json`, `state_*.sqlite`, `ipc/`, `process_manager/chat_processes.json` and `history.jsonl` are never opened.
+
+A session does not exist until the first prompt writes a rollout. A resume after watch started appears on the first append. A quietly unloaded VS Code thread stays listed until the next event for that pid.
 
 ## Testing kit
 
@@ -158,7 +168,7 @@ const { provider, driver } = createMemoryHarness();
 defineConformanceTests({ name: 'memory', provider, driver });
 ```
 
-`createGrokFixtureDriver(home)` drives the same kit against `grokBuild({ home })`.
+`createGrokFixtureDriver(home)` and `createCodexFixtureDriver(home)` drive the same kit against those providers.
 
 ## Non-goals
 
