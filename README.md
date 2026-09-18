@@ -1,9 +1,22 @@
 # all-your-agents
 
-[![CI](https://github.com/markwylde/all-your-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/markwylde/all-your-agents/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/%40markwylde%2Fall-your-agents)](https://www.npmjs.com/package/@markwylde/all-your-agents)
-
 Watch every coding agent on this machine, and inspect the sessions they leave behind.
+
+## Compatibility
+
+| Agent | Live detection | Status | Waiting for | Titles | Model | Tools | Turn outcome | Subagents | Transcript | History | Print mode |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Claude Code | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ¹ |
+| Grok Build | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ² | 🟠 ³ | 🟢 | 🟢 | 🟢 | 🟠 ⁴ |
+
+🟢 full · 🟠 partial · 🔴 none. Subagents covers start, end, background and nested.
+
+1. `claude -p` writes no live index entry, so a print-mode run appears in history only.
+2. Grok's `tool_started` carries no call id, so the current tool is identified by name. Two tools with the same name running at once show as one.
+3. A failed turn is reported as `failed`, but Grok records no error message for it, so `activity.error` is usually empty.
+4. `grok -p` registers as live only when `GROK_TRACK_HEADLESS` is set. Otherwise it appears in history only.
+
+## Usage
 
 ```ts
 import AllYourAgents, { builtInProviders } from '@markwylde/all-your-agents';
