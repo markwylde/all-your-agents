@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { AllYourAgents } from '../../../src/index.js';
 import { grokBuild } from '../../../src/providers/grok-build/index.js';
 import type { Subagent } from '../../../src/types.js';
+import { spyFs } from '../../util/spy-fs.js';
 import { sleep, waitFor } from '../../util/wait.js';
 import { entry, fakeProcesses, makeSession, user, writeIndex, writeMeta } from './home.js';
 
@@ -250,4 +251,54 @@ test('a subagent registered in the live index is not a root; it starts on its pa
 			assert.equal(events.includes(`open:${S2}`) || events.includes(`create:${S2}`), false);
 		},
 	);
+});
+
+test('meta read before the chat tail reaches its spawn still starts as background', async () => {
+	const home = await mkdtemp(join(tmpdir(), 'aya-grok-'));
+	try {
+		const start = Date.now() - 1000;
+		const procs = fakeProcesses(start);
+		procs.set(8, true, start);
+		const dir = await makeSession(home, '/app', A, { ...busy, chat: [user('go', 0)] });
+		await writeIndex(home, [entry(A, 8, '/app')]);
+		const fs = spyFs();
+		let release: () => void = () => {};
+		const held = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let hold = false;
+		const readRange = fs.readRange;
+		// Appends to the conversation are tailed from a non-zero offset: hold those back.
+		fs.readRange = async (path, s, e) => {
+			if (hold && s > 0 && path === join(dir, 'chat_history.jsonl')) await held;
+			return readRange(path, s, e);
+		};
+		const aya = AllYourAgents({
+			providers: [grokBuild({ home })],
+			processes: procs,
+			fs,
+			debounce: { quietMs: 10 },
+		});
+		const starts: Subagent[] = [];
+		aya.on('subagent:start', (s) => starts.push(s));
+		await aya.start();
+		try {
+			hold = true;
+			await appendFile(
+				join(dir, 'chat_history.jsonl'),
+				line(spawn('c2', 'Long job', true)) + line(startedInBackground('c2', S2, 'Long job')),
+			);
+			await writeMeta(dir, meta(S2, 'Long job', 'running'));
+			await waitFor(() => starts.length === 1);
+			assert.equal(starts[0]?.background, true);
+			release();
+			await sleep(60);
+			assert.equal(starts.length, 1);
+		} finally {
+			release();
+			await aya.stop();
+		}
+	} finally {
+		await rm(home, { recursive: true, force: true });
+	}
 });

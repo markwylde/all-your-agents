@@ -73,6 +73,8 @@ type Bound = {
 };
 
 const HARNESS = 'Grok';
+/** How far back a meta file looks for the spawn it answers. */
+const RECENT_CHAT_BYTES = 64 * 1024;
 const PROVIDER = 'grok-build';
 
 export function grokBuild(options: PathOptions = {}): Provider {
@@ -330,6 +332,59 @@ export function grokBuild(options: PathOptions = {}): Provider {
 		return undefined;
 	};
 
+	/**
+	 * A meta file seen before its conversation's tail reached the spawn. The meta does not
+	 * say whether it runs in the background, and a start cannot be revised, so look once at
+	 * the end of that conversation for the spawn and what its tool result says.
+	 */
+	const recentSpawn = async (
+		bound: Bound,
+		meta: SubagentMeta,
+		owner?: string,
+	): Promise<Spawn | undefined> => {
+		if (!ctx) return undefined;
+		const dir = owner ? bound.agents.get(owner)?.childDir : bound.dir;
+		if (!dir) return undefined;
+		const path = join(dir, 'chat_history.jsonl');
+		let text: string;
+		try {
+			const st = await ctx.fs.stat(path);
+			if (!st) return undefined;
+			const from = Math.max(0, st.size - RECENT_CHAT_BYTES);
+			text = decodeUtf8(await ctx.fs.readRange(path, from, st.size));
+			// Starting mid-file, the first line is cut off.
+			if (from > 0) text = text.slice(text.indexOf('\n') + 1);
+		} catch {
+			return undefined;
+		}
+		let found: Spawn | undefined;
+		for (const line of text.split('\n')) {
+			let rec: Record<string, unknown>;
+			try {
+				rec = JSON.parse(line) as Record<string, unknown>;
+			} catch {
+				continue;
+			}
+			for (const event of mapChatRecord(rec, {})) {
+				if (event.kind !== 'subagent' || bound.spawns.get(event.id)?.subagentId) continue;
+				if (event.type !== meta.type || event.title !== meta.title) continue;
+				found = {
+					callId: event.id,
+					owner,
+					type: meta.type,
+					title: meta.title,
+					background: event.background === true,
+				};
+			}
+			if (found && rec.type === 'tool_result' && rec.tool_call_id === found.callId) {
+				const result = parseSpawnResult(textOf(rec.content) ?? '');
+				if (result.background) found.background = true;
+			}
+		}
+		if (found && !bound.spawns.has(found.callId)) bound.spawns.set(found.callId, found);
+		return found && bound.spawns.get(found.callId) === found ? found : undefined;
+	};
+
 	const readMeta = async (bound: Bound, metaDir: string, seeding: boolean): Promise<void> => {
 		if (!ctx) return;
 		const fs = ctx.fs;
@@ -347,9 +402,13 @@ export function grokBuild(options: PathOptions = {}): Provider {
 		if (!meta) return;
 		const owner =
 			meta.parentSessionId && meta.parentSessionId !== bound.id ? meta.parentSessionId : undefined;
+		let spawn = bound.agents.has(meta.subagentId) ? undefined : pendingSpawnFor(bound, meta, owner);
+		if (!bound.agents.has(meta.subagentId) && !spawn && !seeding) {
+			spawn = await recentSpawn(bound, meta, owner);
+			if (!ctx || bound.released) return;
+		}
 		let agent = bound.agents.get(meta.subagentId);
 		if (!agent) {
-			const spawn = pendingSpawnFor(bound, meta, owner);
 			if (spawn) spawn.subagentId = meta.subagentId;
 			agent = newAgent(bound, meta.subagentId, {
 				type: meta.type,
