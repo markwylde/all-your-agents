@@ -1,0 +1,43 @@
+{
+	"session": {
+		"status": {
+			"status": "idle"
+		},
+		"facts": [
+			"turn-started",
+			"tool-started",
+			"tool-finished",
+			"turn-ended",
+			"turn-started",
+			"tool-started",
+			"tool-finished",
+			"turn-ended",
+			"turn-started",
+			"tool-started",
+			"tool-started",
+			"tool-finished",
+			"tool-finished",
+			"turn-ended",
+			"turn-started",
+			"tool-started",
+			"tool-finished",
+			"turn-ended"
+		],
+		"activity": {
+			"openSubagents": 0,
+			"lastTurn": "completed",
+			"lastTurnEndedAt": 1789747884158
+		}
+	},
+	"failed": {
+		"status": {
+			"status": "idle"
+		},
+		"facts": ["turn-started", "turn-ended"],
+		"activity": {
+			"openSubagents": 0,
+			"lastTurn": "failed",
+			"lastTurnEndedAt": 1789747655065
+		}
+	}
+}

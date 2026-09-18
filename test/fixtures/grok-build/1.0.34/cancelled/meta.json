@@ -1,0 +1,18 @@
+{
+	"subagent_id": "01a07736-2bcd-7e22-a8f0-c17d4740c344",
+	"parent_session_id": "01a07735-f42d-7663-a5d4-6d46db572551",
+	"child_session_id": "01a07736-2bcd-7e22-a8f0-c17d4740c344",
+	"subagent_type": "general-purpose",
+	"description": "Task 6",
+	"prompt": "Scrubbed prompt 8.",
+	"status": "cancelled",
+	"started_at": "2026-09-06T14:53:54.006449Z",
+	"completed_at": "2026-09-06T14:55:55.654676Z",
+	"duration_ms": 121655,
+	"tool_calls": 1,
+	"turns": 1,
+	"error": "Subagent was cancelled",
+	"effective_context_source": "new",
+	"child_cwd": "/tmp/work",
+	"effective_model_id": "grok-4.6"
+}

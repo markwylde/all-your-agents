@@ -1,0 +1,33 @@
+[
+	{
+		"id": "01a0b545-974a-78c2-9db5-79132dcc8877",
+		"harness": "Grok",
+		"provider": "grok-build",
+		"kind": "headless",
+		"cwd": "/tmp/app",
+		"startedAt": 1789747631956,
+		"updatedAt": 1789747634729,
+		"model": "x-ai/grok-4.6"
+	},
+	{
+		"id": "01a0b545-efa7-72c0-bd71-03adb1537fe9",
+		"harness": "Grok",
+		"provider": "grok-build",
+		"kind": "headless",
+		"cwd": "/tmp/app",
+		"startedAt": 1789747654575,
+		"updatedAt": 1789747655096,
+		"model": "x-ai/no-such-model-aya"
+	},
+	{
+		"id": "01a0b546-2e0f-7b43-8ed1-79d3540935ed",
+		"harness": "Grok",
+		"provider": "grok-build",
+		"kind": "interactive",
+		"cwd": "/tmp/app",
+		"title": "Fixture session",
+		"startedAt": 1789747670551,
+		"updatedAt": 1789747884185,
+		"model": "x-ai/grok-4.6"
+	}
+]

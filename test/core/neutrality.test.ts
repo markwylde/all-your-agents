@@ -16,14 +16,16 @@ function walk(dir: string): string[] {
 	return out;
 }
 
-test('core does not import providers or mention .claude', () => {
+const HARNESS_HOMES = /\.claude|\.grok|GROK_HOME/;
+
+test('core does not import providers or mention a harness home', () => {
 	const files = walk(join(src, 'core'));
 	assert.ok(files.length > 0);
 	for (const file of files) {
 		const text = readFileSync(file, 'utf8');
 		const rel = relative(src, file);
 		assert.equal(/providers\//.test(text), false, rel);
-		assert.equal(text.includes('.claude'), false, rel);
+		assert.equal(HARNESS_HOMES.test(text), false, rel);
 	}
 });
 
@@ -44,7 +46,9 @@ test('providers do not import node:fs or node:child_process', () => {
 
 test('neutrality test fails when a violation is introduced', () => {
 	const fakeCore = `import '../providers/claude-code/index.js';\nconst home = '.claude';\n`;
-	assert.ok(/providers\//.test(fakeCore) && fakeCore.includes('.claude'));
+	assert.ok(/providers\//.test(fakeCore) && HARNESS_HOMES.test(fakeCore));
+	assert.ok(HARNESS_HOMES.test(`const home = join(homedir(), '.grok');`));
+	assert.ok(HARNESS_HOMES.test('process.env.GROK_HOME'));
 	const fakeProvider = `import { readFile } from 'node:fs';\nimport { exec } from 'node:child_process';\n`;
 	assert.ok(/from ['"]node:fs['"]/.test(fakeProvider));
 	assert.ok(/from ['"]node:child_process['"]/.test(fakeProvider));

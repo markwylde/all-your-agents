@@ -118,7 +118,7 @@ AllYourAgents({
 });
 ```
 
-`reconcile(pid?)` is for hosts that already know a process exited (a terminal emulator). Without `koffi`, `processes.watch` is `unsupported` and the provider re-validates on the next `sessions/` event or `reconcile`.
+`reconcile(pid?)` is for hosts that already know a process exited (a terminal emulator). Without `koffi`, `processes.watch` is `unsupported` and each provider re-validates on the next change to its live index or on `reconcile`.
 
 ## Claude Code
 
@@ -128,6 +128,14 @@ Live index: `<home>/sessions/<pid>.json`. Journals: `<home>/projects/<encoded-cw
 
 Status: `busy` → `running`, `waiting` → `waiting`, `idle`/`shell` → `idle`. Unknown words omit `status`. `model` is the model of the latest assistant record in the journal. `.key` files and the messaging socket are never opened.
 
+## Grok Build
+
+Provider id `grok-build`, harness `Grok`. Home is `$GROK_HOME` if set, otherwise `~/.grok`, overridable via `grokBuild({ home })`. Both built-ins are in `builtInProviders`; pass `providers: [claudeCode()]` to watch Claude Code only.
+
+Live index: `<home>/active_sessions.json`, an array of `{ session_id, pid, cwd, opened_at }`. One pid can hold several sessions. `grok -p` registers only when `GROK_TRACK_HEADLESS` is set; otherwise print-mode runs appear in history with `kind` `headless`. Sessions: `<home>/sessions/<encoded-cwd>/<id>/`. The cwd is percent-encoded like Rust `urlencoding` (everything but `A-Za-z0-9-._~`, so `/tmp/foo(bar)!` is `%2Ftmp%2Ffoo%28bar%29%21`); a cwd whose encoding exceeds 255 bytes is found by a one-level lookup for the session id.
+
+Status comes from `events.jsonl`, Grok's phase log: `waiting_for_model`, `streaming_text`, `streaming_reasoning`, `tool_execution` → `running`; `permission_prompt` → `waiting` (with the tool named by `permission_requested`); no open turn → `idle`. Unknown phases omit `status`. Titles and `model` come from `summary.json`, the conversation from `chat_history.jsonl`, subagents from `subagents/<id>/meta.json`. `active_sessions.lock`, `*.tmp`, `auth.json`, `updates.jsonl` and the session-search sqlite are never opened.
+
 ## Testing kit
 
 ```ts
@@ -136,6 +144,8 @@ import { defineConformanceTests, createMemoryHarness } from '@markwylde/all-your
 const { provider, driver } = createMemoryHarness();
 defineConformanceTests({ name: 'memory', provider, driver });
 ```
+
+`createGrokFixtureDriver(home)` drives the same kit against `grokBuild({ home })`.
 
 ## Non-goals
 

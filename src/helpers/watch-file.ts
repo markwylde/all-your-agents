@@ -10,6 +10,12 @@ export type WatchFileHandle = {
 const same = (a: FsStat | null, b: FsStat | null): boolean =>
 	a === b || (a != null && b != null && a.size === b.size && a.mtimeMs === b.mtimeMs);
 
+/**
+ * Watches the parent directory, filtered by filename, never the file itself. A writer
+ * that replaces the file by renaming a temporary sibling over it gives it a new inode;
+ * inotify follows inodes, so a watch on the file goes silent after the first replace.
+ * A missing parent is awaited under its nearest existing ancestor, one level at a time.
+ */
 export function watchFile(
 	fs: Fs,
 	path: string,
@@ -23,6 +29,7 @@ export function watchFile(
 	const parent = dirname(path);
 	const name = basename(path);
 	let closed = false;
+	let current: WatchHandle | undefined;
 	/** What was last seen, to tell a real difference from a catch-up that found none. */
 	let last: FsStat | null = null;
 	const baseline = fs.stat(path).then(
@@ -36,7 +43,7 @@ export function watchFile(
 	const service = async (onlyIfDifferent: boolean): Promise<void> => {
 		await baseline;
 		if (closed) return;
-		const st = await fs.stat(path);
+		const st = await fs.stat(path).catch(() => null);
 		if (closed) return;
 		const before = last;
 		last = st;
@@ -45,41 +52,109 @@ export function watchFile(
 		else if (before) onChange({ type: 'delete', path });
 	};
 
+	/** Where watches can drop events while another opens or closes, look once afterwards. */
+	let catchUp: () => Promise<void> = () => service(true);
 	const unsubscribe = fs.onWatchChurn?.(() => {
-		if (!closed) coalescer.notify(`churn:${path}`, () => void service(true));
+		if (!closed) coalescer.notify(`churn:${path}`, () => void catchUp());
 	});
 
-	let handle: WatchHandle | undefined;
-	try {
-		handle = fs.watch(path);
-	} catch {
+	/** Open a watch, unless closed. Never await between the `closed` check and `current`. */
+	const open = (target: string): WatchHandle | undefined => {
+		if (closed) return undefined;
 		try {
-			handle = fs.watch(parent);
+			current = fs.watch(target);
+			return current;
 		} catch {
-			handle = undefined;
+			return undefined;
 		}
-	}
+	};
 
-	void (async () => {
-		await baseline;
-		if (!handle || closed) return;
-		try {
-			for await (const event of handle) {
-				if (closed) break;
-				if (event.filename && event.filename !== name) continue;
-				coalescer.notify(path, () => void service(false));
+	const release = (handle: WatchHandle): void => {
+		handle.close();
+		if (current === handle) current = undefined;
+	};
+
+	const arm = async (): Promise<void> => {
+		if (closed) return;
+		const handle = (await fs.stat(parent).catch(() => null))?.isDirectory
+			? open(parent)
+			: undefined;
+		if (handle) watchParent(handle);
+		else await awaitParent();
+	};
+
+	const watchParent = (handle: WatchHandle): void => {
+		catchUp = () => service(true);
+		void (async () => {
+			await baseline;
+			try {
+				for await (const event of handle) {
+					if (closed) return;
+					if (event.filename && event.filename !== name) continue;
+					coalescer.notify(path, () => void service(false));
+				}
+			} catch {
+				// ended
 			}
-		} catch {
-			// ended
+			if (closed || current !== handle) return;
+			// The parent went away: report the file gone, then wait for it to return.
+			if ((await fs.stat(parent).catch(() => null))?.isDirectory) return;
+			release(handle);
+			await service(true);
+			await arm();
+		})();
+	};
+
+	/** Watch the nearest existing ancestor for the next segment on the way to `parent`. */
+	const awaitParent = async (): Promise<void> => {
+		let wanted = parent;
+		let existing = dirname(parent);
+		while (existing !== wanted && !(await fs.stat(existing).catch(() => null))?.isDirectory) {
+			wanted = existing;
+			existing = dirname(existing);
 		}
-	})();
+		const handle = open(existing);
+		if (!handle) return;
+		const segment = basename(wanted);
+		let found = false;
+		const check = async (): Promise<void> => {
+			if (closed || found) return;
+			if (!(await fs.stat(wanted).catch(() => null))?.isDirectory) return;
+			if (closed || found) return;
+			found = true;
+			release(handle);
+			await arm();
+			// Anything created along with the directories was never notified.
+			await service(true);
+		};
+		catchUp = check;
+		void (async () => {
+			try {
+				for await (const event of handle) {
+					if (closed || found) return;
+					if (event.filename && event.filename !== segment) continue;
+					coalescer.notify(wanted, () => void check());
+				}
+			} catch {
+				// ended
+			}
+		})();
+		// It may have appeared between the stat that missed it and the watch opening.
+		await check();
+	};
+
+	// Opened now, so a write made right after this call is still notified.
+	const first = open(parent);
+	if (first) watchParent(first);
+	else void baseline.then(awaitParent).catch(() => {});
 
 	return {
 		close() {
 			closed = true;
 			unsubscribe?.();
 			coalescer.dispose();
-			handle?.close();
+			current?.close();
+			current = undefined;
 		},
 	};
 }

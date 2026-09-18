@@ -1,5 +1,6 @@
 import type { Fs, Processes } from '../../src/helpers/types.js';
 import type { Provider, WatchContext } from '../../src/provider.js';
+import { grokBuild } from '../../src/providers/grok-build/index.js';
 import type {
 	EventMeta,
 	Harness,
@@ -99,3 +100,7 @@ const provider: Provider = {
 };
 
 void provider;
+
+const grok: Provider = grokBuild({ home: '/tmp/grok' });
+const grokHarness: Harness = grok.harness;
+void grokHarness;

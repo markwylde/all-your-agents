@@ -220,3 +220,64 @@ export function waitUntil(
 		tick();
 	});
 }
+
+export function e2eGrokModel(): string {
+	return process.env.AYA_E2E_GROK_MODEL ?? 'x-ai/grok-4.6';
+}
+
+export function e2eGrokEffort(): string {
+	return process.env.AYA_E2E_GROK_EFFORT ?? 'low';
+}
+
+/** A Grok home whose `e2e` model is served by OpenRouter, and a cwd to run in. */
+export async function isolatedGrokHome(): Promise<{ home: string; cwd: string }> {
+	const home = await mkdtemp(join(tmpdir(), 'aya-e2e-grok-'));
+	const cwd = await mkdtemp(join(tmpdir(), 'aya-e2e-cwd-'));
+	writeFileSync(
+		join(home, 'config.toml'),
+		[
+			'[model.e2e]',
+			`model = ${JSON.stringify(e2eGrokModel())}`,
+			'base_url = "https://openrouter.ai/api/v1"',
+			'name = "E2E"',
+			'env_key = "OPENROUTER_API_KEY"',
+			'',
+		].join('\n'),
+	);
+	return { home, cwd };
+}
+
+export function grokEnv(home: string): NodeJS.ProcessEnv {
+	const key = process.env.OPENROUTER_API_KEY;
+	if (!key) throw new Error('OPENROUTER_API_KEY is missing');
+	// Print-mode runs register in the live index only with GROK_TRACK_HEADLESS.
+	return { ...process.env, GROK_HOME: home, OPENROUTER_API_KEY: key, GROK_TRACK_HEADLESS: '1' };
+}
+
+/** `grok -p` in the background; resolves with its exit code and output. */
+export function startPrintGrok(
+	home: string,
+	cwd: string,
+	prompt: string,
+): { child: ChildProcess; done: Promise<{ code: number | null; output: string }> } {
+	const child = spawn('grok', ['-p', prompt, '--yolo', '--effort', e2eGrokEffort(), '-m', 'e2e'], {
+		cwd,
+		env: grokEnv(home),
+		stdio: ['ignore', 'pipe', 'pipe'],
+	});
+	let output = '';
+	child.stdout?.on('data', (chunk: Buffer) => {
+		output += chunk.toString();
+	});
+	child.stderr?.on('data', (chunk: Buffer) => {
+		output += chunk.toString();
+	});
+	const done = new Promise<{ code: number | null; output: string }>((resolve) => {
+		child.on('exit', (code) => resolve({ code, output }));
+		child.on('error', () => resolve({ code: null, output }));
+	});
+	return { child, done };
+}
+
+export const THREE_GROK_AGENT_PROMPT =
+	'You MUST call spawn_subagent exactly 3 times in this turn, in parallel, each with subagent_type=general-purpose and no background. Prompts: (1) Reply with only the word ALPHA. (2) Reply with only the word BETA. (3) Reply with only the word GAMMA. Wait for all three results, then output DONE.';

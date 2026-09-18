@@ -1,0 +1,8 @@
+{"ts": "2026-09-18T16:07:34.669Z", "type": "mcp_config_resolved", "servers": [{"name": "local-mcp", "transport": "stdio", "source": "local"}], "disabled": []}
+{"ts": "2026-09-18T16:07:34.681Z", "type": "mcp_server_starting", "server_name": "local-mcp", "transport": "stdio", "target": "/opt/local-mcp", "timeout_sec": 30}
+{"ts": "2026-09-18T16:07:34.694Z", "type": "turn_started", "session_id": "01a0b545-efa7-72c0-bd71-03adb1537fe9", "turn_number": 0, "model_id": "x-ai/no-such-model-aya", "yolo_mode": true, "conversation_message_count": 3, "session_relationship": "primary", "schema_version": "1.0"}
+{"ts": "2026-09-18T16:07:34.758Z", "type": "mcp_server_connected", "server_name": "local-mcp", "transport": "stdio", "tool_count": 15, "duration_ms": 76, "tools": ["get_mcp_capabilities", "list_terminals", "read_terminal", "search_terminal", "get_terminal_status", "open_terminal", "write_terminal", "run_command", "close_terminal", "focus_terminal", "rename_terminal", "split_terminal", "wait_for_idle", "wait_for_command", "wait_for_attention"]}
+{"ts": "2026-09-18T16:07:34.758Z", "type": "mcp_init_completed", "total_servers": 1, "succeeded": 1, "failed": 0, "auth_required": 0, "total_tools": 15, "duration_ms": 76, "is_reinit": false}
+{"ts": "2026-09-18T16:07:34.995Z", "type": "loop_started", "loop_index": 0}
+{"ts": "2026-09-18T16:07:35.008Z", "type": "phase_changed", "phase": "waiting_for_model"}
+{"ts": "2026-09-18T16:07:35.065Z", "type": "turn_ended", "outcome": "error"}

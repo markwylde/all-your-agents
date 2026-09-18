@@ -1,0 +1,22 @@
+{
+	"info": {
+		"id": "01a0b546-2e0f-7b43-8ed1-79d3540935ed",
+		"cwd": "/tmp/app"
+	},
+	"session_summary": "Scrubbed summary",
+	"created_at": "2026-09-18T16:07:50.551497Z",
+	"updated_at": "2026-09-18T16:11:34.931490Z",
+	"num_messages": 35,
+	"num_chat_messages": 21,
+	"current_model_id": "x-ai/grok-4.6",
+	"next_trace_turn": 5,
+	"chat_format_version": 1,
+	"last_active_at": "2026-09-18T16:11:24.185825Z",
+	"generated_title": "Fixture session",
+	"title_is_manual": true,
+	"agent_name": "grok-build-plan",
+	"sandbox_profile": "off",
+	"last_turn_summary": "",
+	"last_turn_summary_prompt_id": "69deebb5-11cd-473d-b9ca-f401ad7e23cc",
+	"last_recap": ""
+}

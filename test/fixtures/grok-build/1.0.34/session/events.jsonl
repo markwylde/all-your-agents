@@ -1,0 +1,72 @@
+{"ts": "2026-09-18T16:07:50.616Z", "type": "mcp_config_resolved", "servers": [{"name": "local-mcp", "transport": "stdio", "source": "local"}], "disabled": []}
+{"ts": "2026-09-18T16:07:50.633Z", "type": "mcp_server_starting", "server_name": "local-mcp", "transport": "stdio", "target": "/opt/local-mcp", "timeout_sec": 30}
+{"ts": "2026-09-18T16:07:50.696Z", "type": "mcp_server_connected", "server_name": "local-mcp", "transport": "stdio", "tool_count": 15, "duration_ms": 62, "tools": ["get_mcp_capabilities", "list_terminals", "read_terminal", "search_terminal", "get_terminal_status", "open_terminal", "write_terminal", "run_command", "close_terminal", "focus_terminal", "rename_terminal", "split_terminal", "wait_for_idle", "wait_for_command", "wait_for_attention"]}
+{"ts": "2026-09-18T16:07:50.700Z", "type": "mcp_init_completed", "total_servers": 1, "succeeded": 1, "failed": 0, "auth_required": 0, "total_tools": 15, "duration_ms": 66, "is_reinit": false}
+{"ts": "2026-09-18T16:07:57.612Z", "type": "turn_started", "session_id": "01a0b546-2e0f-7b43-8ed1-79d3540935ed", "turn_number": 0, "model_id": "x-ai/grok-4.6", "yolo_mode": false, "conversation_message_count": 3, "session_relationship": "primary", "schema_version": "1.0"}
+{"ts": "2026-09-18T16:07:57.677Z", "type": "loop_started", "loop_index": 0}
+{"ts": "2026-09-18T16:07:57.687Z", "type": "phase_changed", "phase": "waiting_for_model"}
+{"ts": "2026-09-18T16:07:59.682Z", "type": "phase_changed", "phase": "tool_execution"}
+{"ts": "2026-09-18T16:07:59.686Z", "type": "tool_started", "tool_name": "run_terminal_command"}
+{"ts": "2026-09-18T16:07:59.687Z", "type": "phase_changed", "phase": "permission_prompt"}
+{"ts": "2026-09-18T16:07:59.687Z", "type": "permission_requested", "tool_name": "run_terminal_command"}
+{"ts": "2026-09-18T16:07:59.691Z", "type": "permission_resolved", "tool_name": "run_terminal_command", "decision": "allow", "wait_ms": 3}
+{"ts": "2026-09-18T16:07:59.692Z", "type": "phase_changed", "phase": "tool_execution"}
+{"ts": "2026-09-18T16:07:59.865Z", "type": "tool_completed", "tool_name": "run_terminal_command", "duration_ms": 164, "outcome": "success", "tool_call_id": "call-d17c0341-cefc-415e-a6a3-a57c8f71ce93-0"}
+{"ts": "2026-09-18T16:07:59.866Z", "type": "loop_started", "loop_index": 1}
+{"ts": "2026-09-18T16:07:59.866Z", "type": "phase_changed", "phase": "waiting_for_model"}
+{"ts": "2026-09-18T16:08:01.437Z", "type": "first_token"}
+{"ts": "2026-09-18T16:08:01.437Z", "type": "phase_changed", "phase": "streaming_text"}
+{"ts": "2026-09-18T16:08:01.475Z", "type": "phase_changed", "phase": "streaming_text"}
+{"ts": "2026-09-18T16:08:01.547Z", "type": "turn_ended", "outcome": "completed"}
+{"ts": "2026-09-18T16:08:19.335Z", "type": "turn_started", "session_id": "01a0b546-2e0f-7b43-8ed1-79d3540935ed", "turn_number": 1, "model_id": "x-ai/grok-4.6", "yolo_mode": false, "conversation_message_count": 8, "session_relationship": "primary", "schema_version": "1.0"}
+{"ts": "2026-09-18T16:08:19.369Z", "type": "loop_started", "loop_index": 0}
+{"ts": "2026-09-18T16:08:19.370Z", "type": "phase_changed", "phase": "waiting_for_model"}
+{"ts": "2026-09-18T16:08:21.126Z", "type": "phase_changed", "phase": "tool_execution"}
+{"ts": "2026-09-18T16:08:21.127Z", "type": "tool_started", "tool_name": "run_terminal_command"}
+{"ts": "2026-09-18T16:08:21.127Z", "type": "phase_changed", "phase": "permission_prompt"}
+{"ts": "2026-09-18T16:08:21.128Z", "type": "permission_requested", "tool_name": "run_terminal_command"}
+{"ts": "2026-09-18T16:10:39.565Z", "type": "permission_resolved", "tool_name": "run_terminal_command", "decision": "allow", "wait_ms": 138435}
+{"ts": "2026-09-18T16:10:39.565Z", "type": "phase_changed", "phase": "tool_execution"}
+{"ts": "2026-09-18T16:10:39.567Z", "type": "yolo_toggled", "enabled": true}
+{"ts": "2026-09-18T16:10:39.728Z", "type": "tool_completed", "tool_name": "run_terminal_command", "duration_ms": 154, "outcome": "success", "tool_call_id": "call-e2839ef5-c6b0-4c7d-a699-f65f3cc357aa-1"}
+{"ts": "2026-09-18T16:10:39.729Z", "type": "loop_started", "loop_index": 1}
+{"ts": "2026-09-18T16:10:39.729Z", "type": "phase_changed", "phase": "waiting_for_model"}
+{"ts": "2026-09-18T16:10:43.371Z", "type": "first_token"}
+{"ts": "2026-09-18T16:10:43.371Z", "type": "phase_changed", "phase": "streaming_text"}
+{"ts": "2026-09-18T16:10:43.497Z", "type": "turn_ended", "outcome": "completed"}
+{"ts": "2026-09-18T16:10:55.553Z", "type": "turn_started", "session_id": "01a0b546-2e0f-7b43-8ed1-79d3540935ed", "turn_number": 2, "model_id": "x-ai/grok-4.6", "yolo_mode": true, "conversation_message_count": 12, "session_relationship": "primary", "schema_version": "1.0"}
+{"ts": "2026-09-18T16:10:55.586Z", "type": "loop_started", "loop_index": 0}
+{"ts": "2026-09-18T16:10:55.587Z", "type": "phase_changed", "phase": "waiting_for_model"}
+{"ts": "2026-09-18T16:11:00.196Z", "type": "phase_changed", "phase": "tool_execution"}
+{"ts": "2026-09-18T16:11:00.196Z", "type": "tool_started", "tool_name": "spawn_subagent"}
+{"ts": "2026-09-18T16:11:00.202Z", "type": "phase_changed", "phase": "permission_prompt"}
+{"ts": "2026-09-18T16:11:00.203Z", "type": "permission_requested", "tool_name": "spawn_subagent"}
+{"ts": "2026-09-18T16:11:00.204Z", "type": "permission_resolved", "tool_name": "spawn_subagent", "decision": "allow", "wait_ms": 0}
+{"ts": "2026-09-18T16:11:00.204Z", "type": "phase_changed", "phase": "tool_execution"}
+{"ts": "2026-09-18T16:11:00.204Z", "type": "tool_started", "tool_name": "spawn_subagent"}
+{"ts": "2026-09-18T16:11:00.204Z", "type": "phase_changed", "phase": "permission_prompt"}
+{"ts": "2026-09-18T16:11:00.207Z", "type": "permission_requested", "tool_name": "spawn_subagent"}
+{"ts": "2026-09-18T16:11:00.207Z", "type": "permission_resolved", "tool_name": "spawn_subagent", "decision": "allow", "wait_ms": 0}
+{"ts": "2026-09-18T16:11:00.207Z", "type": "phase_changed", "phase": "tool_execution"}
+{"ts": "2026-09-18T16:11:00.211Z", "type": "tool_completed", "tool_name": "spawn_subagent", "duration_ms": 2, "outcome": "success", "tool_call_id": "call-8b8227da-6032-43b7-a1eb-bcdf9ca36a66-3"}
+{"ts": "2026-09-18T16:11:02.162Z", "type": "tool_completed", "tool_name": "spawn_subagent", "duration_ms": 1954, "outcome": "success", "tool_call_id": "call-8b8227da-6032-43b7-a1eb-bcdf9ca36a66-2"}
+{"ts": "2026-09-18T16:11:02.162Z", "type": "loop_started", "loop_index": 1}
+{"ts": "2026-09-18T16:11:02.166Z", "type": "phase_changed", "phase": "waiting_for_model"}
+{"ts": "2026-09-18T16:11:03.925Z", "type": "first_token"}
+{"ts": "2026-09-18T16:11:03.925Z", "type": "phase_changed", "phase": "streaming_text"}
+{"ts": "2026-09-18T16:11:04.128Z", "type": "turn_ended", "outcome": "completed"}
+{"ts": "2026-09-18T16:11:08.810Z", "type": "turn_started", "session_id": "01a0b546-2e0f-7b43-8ed1-79d3540935ed", "turn_number": 3, "model_id": "x-ai/grok-4.6", "yolo_mode": true, "conversation_message_count": 17, "session_relationship": "primary", "schema_version": "1.0"}
+{"ts": "2026-09-18T16:11:08.841Z", "type": "loop_started", "loop_index": 0}
+{"ts": "2026-09-18T16:11:08.842Z", "type": "phase_changed", "phase": "waiting_for_model"}
+{"ts": "2026-09-18T16:11:10.588Z", "type": "phase_changed", "phase": "tool_execution"}
+{"ts": "2026-09-18T16:11:10.588Z", "type": "tool_started", "tool_name": "spawn_subagent"}
+{"ts": "2026-09-18T16:11:10.588Z", "type": "phase_changed", "phase": "permission_prompt"}
+{"ts": "2026-09-18T16:11:10.588Z", "type": "permission_requested", "tool_name": "spawn_subagent"}
+{"ts": "2026-09-18T16:11:10.588Z", "type": "permission_resolved", "tool_name": "spawn_subagent", "decision": "allow", "wait_ms": 0}
+{"ts": "2026-09-18T16:11:10.588Z", "type": "phase_changed", "phase": "tool_execution"}
+{"ts": "2026-09-18T16:11:18.446Z", "type": "tool_completed", "tool_name": "spawn_subagent", "duration_ms": 7857, "outcome": "success", "tool_call_id": "call-979a3eee-0fca-44df-868c-67574c9c56d8-4"}
+{"ts": "2026-09-18T16:11:18.446Z", "type": "loop_started", "loop_index": 1}
+{"ts": "2026-09-18T16:11:18.446Z", "type": "phase_changed", "phase": "waiting_for_model"}
+{"ts": "2026-09-18T16:11:23.834Z", "type": "first_token"}
+{"ts": "2026-09-18T16:11:23.834Z", "type": "phase_changed", "phase": "streaming_text"}
+{"ts": "2026-09-18T16:11:24.158Z", "type": "turn_ended", "outcome": "completed"}
