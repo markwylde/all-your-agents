@@ -27,10 +27,10 @@ jobs:
       - run: npm test
 
   e2e:
-    if: github.event_name == 'push'
+    # Pull requests from forks get no secrets, so they cannot run it.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -47,6 +47,19 @@ jobs:
             sleep $((i * 4))
           done
           echo "Claude Code install failed after retries"
+          exit 1
+      - name: Install Grok Build
+        env:
+          GROK_VERSION: 1.0.34
+        run: |
+          for i in 1 2 3 4; do
+            if curl -fsSL https://x.ai/cli/install.sh | bash -s "$GROK_VERSION" && "$HOME/.grok/bin/grok" --version; then
+              echo "$HOME/.grok/bin" >> "$GITHUB_PATH"
+              exit 0
+            fi
+            sleep $((i * 4))
+          done
+          echo "Grok Build install failed after retries"
           exit 1
       - name: Live e2e
         env:

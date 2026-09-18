@@ -254,6 +254,16 @@ export function grokEnv(home: string): NodeJS.ProcessEnv {
 	return { ...process.env, GROK_HOME: home, OPENROUTER_API_KEY: key, GROK_TRACK_HEADLESS: '1' };
 }
 
+/** Fails at once when the `grok` binary is missing, rather than timing out waiting for it. */
+export function requireGrok(): void {
+	const probe = spawnSync('grok', ['--version'], { encoding: 'utf8' });
+	if (probe.status !== 0) {
+		throw new Error(
+			`grok is not installed or not on PATH: ${probe.error?.message ?? probe.stderr}`,
+		);
+	}
+}
+
 /** `grok -p` in the background; resolves with its exit code and output. */
 export function startPrintGrok(
 	home: string,
