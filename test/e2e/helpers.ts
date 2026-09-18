@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const THREE_AGENT_PROMPT =
-	'This is an automated test. Do not plan or think at length. You MUST invoke the Agent tool exactly 3 times in this turn, in parallel. Each invocation: subagent_type=general-purpose. Prompts: (1) Reply with only the word ALPHA and stop. (2) Reply with only the word BETA and stop. (3) Reply with only the word GAMMA and stop. Do not write any user-facing text until all three tool results return. Then output DONE.';
+	'This is an automated test. Do not plan or think at length. You MUST invoke the Agent tool exactly 3 times in this turn, in parallel. Each invocation: subagent_type=general-purpose, model=haiku. Prompts: (1) Reply with only the word ALPHA and stop. (2) Reply with only the word BETA and stop. (3) Reply with only the word GAMMA and stop. Do not write any user-facing text until all three tool results return. Then output DONE.';
 
 export function loadDotenv(): void {
 	const roots = [
@@ -76,10 +76,12 @@ export function claudeEnv(home: string): NodeJS.ProcessEnv {
 		ANTHROPIC_BASE_URL: 'https://openrouter.ai/api',
 		ANTHROPIC_AUTH_TOKEN: key,
 		ANTHROPIC_API_KEY: '',
+		ANTHROPIC_MODEL: model,
 		ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
 		ANTHROPIC_DEFAULT_SONNET_MODEL: model,
 		ANTHROPIC_DEFAULT_OPUS_MODEL: model,
 		CLAUDE_CODE_SUBAGENT_MODEL: model,
+		CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1',
 	};
 }
 
@@ -91,6 +93,11 @@ export async function isolatedClaudeHome(): Promise<{ home: string; cwd: string 
 		join(home, 'settings.json'),
 		JSON.stringify({
 			model: e2eModel(),
+			env: {
+				ANTHROPIC_MODEL: e2eModel(),
+				CLAUDE_CODE_SUBAGENT_MODEL: e2eModel(),
+				CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1',
+			},
 			permissions: { defaultMode: 'bypassPermissions' },
 			skipDangerousModePermissionPrompt: true,
 			theme: 'dark',
