@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFile, mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, open, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -183,7 +183,8 @@ test('append after start opens a resume; user prompt titles', async () => {
 		const procs = fakeCodexProcesses(start);
 		procs.set(5, true, start);
 		const path = rolloutPath(home, A);
-		await writeRollout(path, [sessionMeta(A)]);
+		// A resumed thread's session_meta predates the resuming process.
+		await writeRollout(path, [sessionMeta(A, {}, new Date(start - 86_400_000).toISOString())]);
 		const aya = AllYourAgents({
 			providers: [codexCli({ home })],
 			processes: procs,
@@ -204,6 +205,76 @@ test('append after start opens a resume; user prompt titles', async () => {
 	});
 });
 
+test('resume after start is seen through a held append handle', async () => {
+	// Codex keeps its rollout open and appends through that handle. On macOS a
+	// directory watch reports nothing for such writes until the handle closes.
+	await withHome(async (home) => {
+		const start = Date.now() - 1000;
+		const procs = fakeCodexProcesses(start);
+		procs.set(6, true, start);
+		const path = rolloutPath(home, A);
+		await writeRollout(path, [sessionMeta(A, {}, new Date(start - 86_400_000).toISOString())]);
+		// Let FSEvents flush the file's creation, so only the held write is left to see.
+		await sleep(1500);
+		const aya = AllYourAgents({
+			providers: [codexCli({ home })],
+			processes: procs,
+			debounce: { quietMs: 10 },
+		});
+		const events: string[] = [];
+		aya.on('session:open', (s) => events.push(`open:${s.id}`));
+		await aya.start();
+		// Let start-up watch churn settle, so its catch-up rescan cannot see the write.
+		await sleep(500);
+		const handle = await open(path, 'a');
+		try {
+			procs.hold(6, path);
+			await handle.write(`${JSON.stringify(eventMsg('thread_settings_applied'))}\n`);
+			await waitFor(() => events.includes(`open:${A}`));
+		} finally {
+			await handle.close();
+			await aya.stop();
+		}
+	});
+});
+
+test('quit then resume again is seen through a held append handle', async () => {
+	await withHome(async (home) => {
+		const start = Date.now() - 1000;
+		const procs = fakeCodexProcesses(start);
+		procs.set(7, true, start);
+		const path = rolloutPath(home, A);
+		await writeRollout(path, [sessionMeta(A, {}, new Date(start - 86_400_000).toISOString())]);
+		procs.hold(7, path);
+		await sleep(1500);
+		const aya = AllYourAgents({
+			providers: [codexCli({ home })],
+			processes: procs,
+			debounce: { quietMs: 10 },
+		});
+		const events: string[] = [];
+		aya.on('session:open', (s) => events.push(`open:${s.pid}`));
+		aya.on('session:close', () => events.push('close'));
+		await aya.start();
+		await waitFor(() => events.includes('open:7'));
+		procs.drop(7, path);
+		procs.set(7, false);
+		procs.fire(7);
+		await waitFor(() => events.includes('close'));
+		await sleep(500);
+		procs.set(8, true, Date.now());
+		const handle = await open(path, 'a');
+		try {
+			procs.hold(8, path);
+			await handle.write(`${JSON.stringify(eventMsg('thread_settings_applied'))}\n`);
+			await waitFor(() => events.includes('open:8'));
+		} finally {
+			await handle.close();
+			await aya.stop();
+		}
+	});
+});
+
 test('two sessions one pid; resume at start; missing home then created', async () => {
 	await withHome(async (home) => {
 		const start = Date.now() - 1000;
@@ -211,7 +282,7 @@ test('two sessions one pid; resume at start; missing home then created', async (
 		procs.set(2, true, start);
 		const aPath = rolloutPath(home, A);
 		const bPath = rolloutPath(home, B);
-		await writeRollout(aPath, [sessionMeta(A)]);
+		await writeRollout(aPath, [sessionMeta(A, {}, new Date(start - 86_400_000).toISOString())]);
 		await writeRollout(bPath, [sessionMeta(B)]);
 		procs.hold(2, aPath);
 		procs.hold(2, bPath);
