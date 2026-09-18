@@ -225,6 +225,17 @@ When the derived status becomes `idle` and the turn has not ended, the provider 
 - **WHEN** `events.jsonl` holds only `mcp_*` records
 - **THEN** `activity.lastTurn` is absent and `status` is `idle`
 
+### Requirement: Turns rewound by a cancel before output
+A cancel (Ctrl-C) before the model produces output makes Grok 1.0.34 rewind the prompt into the input box and write no `turn_ended`: `events.jsonl` ends at `phase_changed` `waiting_for_model`. The only trace is a `shell.cancel.rewind_decision` line with `ctx.rewind_disposition` `rewound`, `sid` and `pid` in the shared `<home>/logs/unified.jsonl`, which every Grok process holds open for append. While at least one session is bound, the provider SHALL follow that log from its current end, watching the file itself (a directory watch on macOS sees nothing until the writer closes it), and SHALL NOT read it from the start. A rewind for a bound session, from its pid, timestamped at or after the open turn's `turn_started`, SHALL end that turn `interrupted`, so the status becomes `idle`. At bind, when replay leaves a turn open, the provider SHALL look through the last 1 MiB of the log for such a rewind.
+
+#### Scenario: Ctrl-C while waiting for the model
+- **WHEN** a bound session's open turn is at `waiting_for_model` and the log gains a `rewound` rewind decision for that session and pid
+- **THEN** the turn ends `interrupted` and the status is `idle`
+
+#### Scenario: Rewind older than the open turn
+- **WHEN** the only rewind for the session predates the open turn's `turn_started`
+- **THEN** the turn stays open
+
 ### Requirement: Subagent lifecycle
 The provider SHALL discover a subagent from either of two sources, whichever comes first:
 - a `spawn_subagent` tool use in `chat_history.jsonl`

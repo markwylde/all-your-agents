@@ -42,6 +42,11 @@ export function indexPath(home: string): string {
 	return join(home, 'active_sessions.json');
 }
 
+/** The log every Grok process shares. */
+export function logPath(home: string): string {
+	return join(home, 'logs', 'unified.jsonl');
+}
+
 export function sessionsDir(home: string): string {
 	return join(home, 'sessions');
 }

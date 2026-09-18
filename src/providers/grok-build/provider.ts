@@ -16,7 +16,8 @@ import {
 	textOf,
 } from './journal.ts';
 import { isSubagentKind, listSessions, readSummary, type Summary } from './list.ts';
-import { derivedSessionDir, grokHome, indexPath, type PathOptions } from './paths.ts';
+import { followRewinds, type Rewind, recentRewinds } from './log.ts';
+import { derivedSessionDir, grokHome, indexPath, logPath, type PathOptions } from './paths.ts';
 import { META_MAX_BYTES, parseMeta, parseSpawnResult, type SubagentMeta } from './subagents.ts';
 
 type Tail = AsyncIterable<unknown> & { close(): void };
@@ -146,6 +147,24 @@ export function grokBuild(options: PathOptions = {}): Provider {
 		pidWatches.delete(bound.pid);
 	};
 
+	// The shared log, followed only while a session is bound.
+
+	let log: { close(): void } | undefined;
+
+	const followLog = (): void => {
+		if (!ctx || log) return;
+		log = followRewinds(ctx, logPath(homeOf()), (rewind) => {
+			const bound = bounds.get(rewind.sessionId);
+			if (!closed && bound) endRewound(bound, rewind);
+		});
+	};
+
+	const unfollowLogIfIdle = (): void => {
+		if (bounds.size > 0) return;
+		log?.close();
+		log = undefined;
+	};
+
 	// Teardown.
 
 	const closeAgent = (agent: Agent): void => {
@@ -164,6 +183,7 @@ export function grokBuild(options: PathOptions = {}): Provider {
 		for (const agent of bound.agents.values()) closeAgent(agent);
 		releaseProcess(bound);
 		if (bounds.get(bound.id) === bound) bounds.delete(bound.id);
+		unfollowLogIfIdle();
 	};
 
 	const closeBound = (bound: Bound): void => {
@@ -255,6 +275,22 @@ export function grokBuild(options: PathOptions = {}): Provider {
 			ctx.emit('turn', { sessionId: bound.id, ...withError(fact, bound.chatError) });
 		}
 		scheduleStatus(bound);
+	};
+
+	/**
+	 * A cancel before any output rewinds the prompt and ends the turn without a
+	 * `turn_ended`. Only one after the open turn started, from the same process, ends it.
+	 */
+	const endRewound = (bound: Bound, rewind: Rewind): void => {
+		if (bound.released || !bound.events.turnOpen) return;
+		if (rewind.pid != null && rewind.pid !== bound.pid) return;
+		const started = bound.events.turnStartedAt;
+		if (rewind.at != null && started != null && rewind.at < started) return;
+		handleEvent(bound, {
+			type: 'turn_ended',
+			outcome: 'cancelled',
+			ts: rewind.at != null ? new Date(rewind.at).toISOString() : undefined,
+		});
 	};
 
 	// Subagents.
@@ -626,6 +662,14 @@ export function grokBuild(options: PathOptions = {}): Provider {
 			bound.events = replay.state;
 			reportModel(bound, replay.state.model);
 			ctx.emit('activity:replay', { id: bound.id, facts: replay.facts });
+			if (bound.events.turnOpen) {
+				// Rewound before we were watching: the log is the only place that says so.
+				const rewinds = await recentRewinds(ctx.fs, logPath(homeOf()));
+				if (!ctx || bound.released || bound.dir !== dir) return;
+				for (const rewind of rewinds) {
+					if (rewind.sessionId === bound.id) endRewound(bound, rewind);
+				}
+			}
 			applyStatus(bound);
 		}
 		consume(bound, chatTail, (rec) => handleChat(bound, rec, undefined, false));
@@ -685,6 +729,7 @@ export function grokBuild(options: PathOptions = {}): Provider {
 		}
 		const bound = newBound(entry);
 		bounds.set(bound.id, bound);
+		followLog();
 		ctx.emit(dir ? 'session:open' : 'session:create', {
 			id: bound.id,
 			harness: HARNESS,
@@ -829,6 +874,7 @@ export function grokBuild(options: PathOptions = {}): Provider {
 			const index = watchCtx.watchFile(indexPath(homeOf()), () => {
 				if (!closed) void inOrder(serviceIndex);
 			});
+
 			await inOrder(serviceIndex);
 			await drain();
 			return () => {
