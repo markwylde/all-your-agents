@@ -3,7 +3,6 @@ import type { ProcessInfo } from '../../helpers/types.ts';
 import type { SessionKind } from '../../types.ts';
 
 export const SESSION_META_MAX_BYTES = 1024 * 1024;
-export const START_TIME_TOLERANCE_MS = 5000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -110,11 +109,12 @@ export function parseSessionMeta(bytes: Uint8Array): SessionMeta | undefined {
 	return out;
 }
 
-export function acceptMeta(meta: SessionMeta, info: ProcessInfo): boolean {
-	if (!info.alive) return false;
-	if (info.startTime == null) return true;
-	if (meta.timestamp == null) return false;
-	return meta.timestamp >= info.startTime - START_TIME_TOLERANCE_MS;
+/**
+ * The pid came from a live holders probe, so it cannot be a recycled pid, and a
+ * resumed thread's session_meta always predates the process. No start-time check.
+ */
+export function acceptMeta(_meta: SessionMeta, info: ProcessInfo): boolean {
+	return info.alive;
 }
 
 export const allowedMetaFields = [...ALLOWED_META_FIELDS];

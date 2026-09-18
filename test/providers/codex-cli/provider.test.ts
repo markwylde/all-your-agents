@@ -183,7 +183,8 @@ test('append after start opens a resume; user prompt titles', async () => {
 		const procs = fakeCodexProcesses(start);
 		procs.set(5, true, start);
 		const path = rolloutPath(home, A);
-		await writeRollout(path, [sessionMeta(A)]);
+		// A resumed thread's session_meta predates the resuming process.
+		await writeRollout(path, [sessionMeta(A, {}, new Date(start - 86_400_000).toISOString())]);
 		const aya = AllYourAgents({
 			providers: [codexCli({ home })],
 			processes: procs,
@@ -211,7 +212,7 @@ test('two sessions one pid; resume at start; missing home then created', async (
 		procs.set(2, true, start);
 		const aPath = rolloutPath(home, A);
 		const bPath = rolloutPath(home, B);
-		await writeRollout(aPath, [sessionMeta(A)]);
+		await writeRollout(aPath, [sessionMeta(A, {}, new Date(start - 86_400_000).toISOString())]);
 		await writeRollout(bPath, [sessionMeta(B)]);
 		procs.hold(2, aPath);
 		procs.hold(2, bPath);

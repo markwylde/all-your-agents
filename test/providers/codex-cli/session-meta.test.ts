@@ -10,7 +10,7 @@ import { A, sessionMeta } from './home.js';
 
 const bytes = (rec: unknown) => encodeUtf8(`${JSON.stringify(rec)}\n`);
 
-test('parses root, subagent, fork, and rejects recycled pid', () => {
+test('parses root, subagent, fork; accepts a resume older than its process', () => {
 	const at = Date.now();
 	const iso = new Date(at).toISOString();
 	const root = parseSessionMeta(bytes(sessionMeta(A, {}, iso)));
@@ -24,8 +24,9 @@ test('parses root, subagent, fork, and rejects recycled pid', () => {
 	assert.equal(acceptMeta(skewOk, { alive: true, startTime: at }), true);
 	const skewBad = parseSessionMeta(bytes(sessionMeta(A, {}, new Date(at - 6000).toISOString())));
 	assert.ok(skewBad);
-	assert.equal(acceptMeta(skewBad, { alive: true, startTime: at }), false);
-	assert.equal(acceptMeta(root, { alive: true, startTime: at + 3_600_000 }), false);
+	assert.equal(acceptMeta(skewBad, { alive: true, startTime: at }), true);
+	assert.equal(acceptMeta(root, { alive: true, startTime: at + 3_600_000 }), true);
+	assert.equal(acceptMeta(root, { alive: false }), false);
 	assert.equal(
 		parseSessionMeta(
 			bytes(

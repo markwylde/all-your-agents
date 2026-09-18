@@ -58,25 +58,16 @@ The provider SHALL accept a live binding only when all of these hold:
 - `cwd` is a non-empty string
 - `holders(path)` returns at least one pid
 - that process exists
-- if the process start time is known, `session_meta.timestamp` is at or after that start minus 5 seconds
 
-There is no upper bound relative to start: a session whose meta timestamp is a minute after launch SHALL be accepted (resume and slow startup). If the start time cannot be determined but the process exists, the binding SHALL be accepted. A malformed or oversized first line SHALL produce no session event and SHALL leave the watch running. Candidates that fail validation SHALL be ignored, not guessed.
+The process start time SHALL NOT be compared with `session_meta.timestamp`. The pid comes from a live `holders` probe, so it cannot be a recycled pid, and a resumed thread's `session_meta.timestamp` always predates the process that resumed it. A malformed or oversized first line SHALL produce no session event and SHALL leave the watch running. Candidates that fail validation SHALL be ignored, not guessed.
 
-#### Scenario: Recycled pid
-- **WHEN** a leftover open-handle guess would name a pid now used by a process that started hours after the rollout's `session_meta.timestamp`
+#### Scenario: Resume of an old thread
+- **WHEN** a process started today holds a rollout whose `session_meta.timestamp` is from yesterday
+- **THEN** it is accepted
+
+#### Scenario: Holder exited
+- **WHEN** the pid returned by `holders` no longer exists when its start time is read
 - **THEN** no session event is emitted
-
-#### Scenario: Resume long after launch
-- **WHEN** `session_meta.timestamp` is 60 seconds after the process start time
-- **THEN** it is accepted
-
-#### Scenario: Clock skew within tolerance
-- **WHEN** `session_meta.timestamp` is 4 seconds before the process start time
-- **THEN** it is accepted
-
-#### Scenario: Opened before the process
-- **WHEN** `session_meta.timestamp` is 6 seconds before the process start time
-- **THEN** it is rejected
 
 #### Scenario: Corrupt first line
 - **WHEN** a new rollout's first line is invalid JSON
