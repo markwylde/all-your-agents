@@ -68,6 +68,7 @@ export const stubProcesses = {
 export function claudeEnv(home: string): NodeJS.ProcessEnv {
 	const key = process.env.OPENROUTER_API_KEY;
 	if (!key) throw new Error('OPENROUTER_API_KEY is missing');
+	const model = e2eModel();
 	return {
 		...process.env,
 		CLAUDE_CONFIG_DIR: home,
@@ -75,8 +76,10 @@ export function claudeEnv(home: string): NodeJS.ProcessEnv {
 		ANTHROPIC_BASE_URL: 'https://openrouter.ai/api',
 		ANTHROPIC_AUTH_TOKEN: key,
 		ANTHROPIC_API_KEY: '',
-		ANTHROPIC_DEFAULT_SONNET_MODEL: e2eModel(),
-		CLAUDE_CODE_SUBAGENT_MODEL: e2eModel(),
+		ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+		ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+		ANTHROPIC_DEFAULT_OPUS_MODEL: model,
+		CLAUDE_CODE_SUBAGENT_MODEL: model,
 	};
 }
 
@@ -87,6 +90,7 @@ export async function isolatedClaudeHome(): Promise<{ home: string; cwd: string 
 	writeFileSync(
 		join(home, 'settings.json'),
 		JSON.stringify({
+			model: e2eModel(),
 			permissions: { defaultMode: 'bypassPermissions' },
 			skipDangerousModePermissionPrompt: true,
 			theme: 'dark',

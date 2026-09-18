@@ -16,7 +16,7 @@ import {
 	waitUntil,
 } from './helpers.js';
 
-test('sonnet --bg: 3 subagents start and end', async (t) => {
+test('haiku --bg: 3 subagents start and end', async (t) => {
 	if (!liveEnabled()) {
 		t.skip('set AYA_LIVE=1 and OPENROUTER_API_KEY');
 		return;
@@ -52,12 +52,12 @@ test('sonnet --bg: 3 subagents start and end', async (t) => {
 			log.push(`bg:${bgId}`);
 			await waitUntil(
 				() => starts.length >= 3,
-				180_000,
+				25_000,
 				() => `3 starts; have ${starts.length}: ${log.join(' | ')}`,
 			);
 			await waitUntil(
 				() => ends.length >= 3,
-				180_000,
+				25_000,
 				() => `3 ends; have ${ends.length}: ${log.join(' | ')}`,
 			);
 			assert.equal(new Set(starts.map((s) => s.id)).size, 3);
@@ -77,7 +77,7 @@ test('sonnet --bg: 3 subagents start and end', async (t) => {
 	});
 });
 
-test('sonnet -p: 3 subagents show up in inspect history', async (t) => {
+test('haiku -p: 3 subagents show up in inspect history', async (t) => {
 	if (!liveEnabled()) {
 		t.skip('set AYA_LIVE=1 and OPENROUTER_API_KEY');
 		return;
@@ -98,7 +98,7 @@ test('sonnet -p: 3 subagents show up in inspect history', async (t) => {
 					'8',
 					THREE_AGENT_PROMPT,
 				],
-				{ cwd, env: claudeEnv(home), encoding: 'utf8', timeout: 180_000 },
+				{ cwd, env: claudeEnv(home), encoding: 'utf8', timeout: 25_000 },
 			);
 			assert.equal(result.status, 0, result.stderr || result.stdout);
 			assert.match(result.stdout, /DONE|ALPHA|BETA|GAMMA/i);
