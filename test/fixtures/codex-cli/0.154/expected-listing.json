@@ -1,0 +1,24 @@
+[
+	{
+		"id": "00000000-0000-4000-8000-0000000000e1",
+		"harness": "Codex",
+		"provider": "codex-cli",
+		"kind": "headless",
+		"cwd": "/tmp/fixture",
+		"title": "scrubbed exec prompt",
+		"titleSource": "prompt",
+		"startedAt": 1767225620000,
+		"model": "gpt-5.6-luna"
+	},
+	{
+		"id": "00000000-0000-4000-8000-0000000000f1",
+		"harness": "Codex",
+		"provider": "codex-cli",
+		"kind": "interactive",
+		"cwd": "/tmp/fixture",
+		"title": "Fixture session",
+		"titleSource": "harness",
+		"startedAt": 1767225600000,
+		"model": "gpt-5.6-luna"
+	}
+]

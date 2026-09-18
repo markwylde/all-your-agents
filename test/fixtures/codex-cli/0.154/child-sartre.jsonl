@@ -1,0 +1,4 @@
+{"timestamp":"2026-01-01T00:00:13.000Z","type":"session_meta","payload":{"id":"00000000-0000-4000-8000-0000000000c1","session_id":"00000000-0000-4000-8000-0000000000f1","cwd":"/tmp/fixture","timestamp":"2026-01-01T00:00:13.000Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"00000000-0000-4000-8000-0000000000f1"}}},"thread_source":"subagent","parent_thread_id":"00000000-0000-4000-8000-0000000000f1","agent_nickname":"Sartre","agent_role":"generalPurpose","originator":"codex-tui","cli_version":"0.154.0"}}
+{"timestamp":"2026-01-01T00:00:13.100Z","type":"event_msg","payload":{"type":"task_started","turn_id":"c1"}}
+{"timestamp":"2026-01-01T00:00:13.200Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"scrubbed child prompt"}]}}
+{"timestamp":"2026-01-01T00:00:13.800Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"c1"}}

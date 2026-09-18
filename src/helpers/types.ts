@@ -51,9 +51,23 @@ export type ProcessWatchHandle = {
 
 export type ProcessWatchResult = ProcessWatchHandle | 'unsupported';
 
+export type FileHolder = {
+	path: string;
+	pid: number;
+};
+
 export type Processes = {
 	info(pid: number): Promise<ProcessInfo>;
 	watch(pid: number, onExit: () => void): ProcessWatchResult;
+	/**
+	 * One-time: pids that currently have `path` open. Optional; a provider whose
+	 * harness writes no pid index uses it to bind live sessions.
+	 */
+	holders?(path: string): Promise<number[]>;
+	/**
+	 * One-time: open files under `directory` and the pid holding each. Optional.
+	 */
+	heldUnder?(directory: string): Promise<FileHolder[]>;
 };
 
 export type DirChange = {

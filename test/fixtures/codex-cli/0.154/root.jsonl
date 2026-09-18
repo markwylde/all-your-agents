@@ -1,0 +1,16 @@
+{"timestamp":"2026-01-01T00:00:00.000Z","type":"session_meta","payload":{"id":"00000000-0000-4000-8000-0000000000f1","session_id":"00000000-0000-4000-8000-0000000000f1","cwd":"/tmp/fixture","timestamp":"2026-01-01T00:00:00.000Z","source":"cli","originator":"codex-tui","cli_version":"0.154.0"}}
+{"timestamp":"2026-01-01T00:00:01.000Z","type":"event_msg","payload":{"type":"thread_settings_applied","thread_settings":{"model":"gpt-5.6-luna","cwd":"/tmp/fixture"}}}
+{"timestamp":"2026-01-01T00:00:02.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}
+{"timestamp":"2026-01-01T00:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"scrubbed prompt"}]}}
+{"timestamp":"2026-01-01T00:00:04.000Z","type":"response_item","payload":{"type":"function_call","call_id":"c1","name":"exec","arguments":"{}"}}
+{"timestamp":"2026-01-01T00:00:05.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"CommandExecution","id":"exec-1"}}}
+{"timestamp":"2026-01-01T00:00:06.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":"ok"}}
+{"timestamp":"2026-01-01T00:00:07.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1"}}
+{"timestamp":"2026-01-01T00:00:08.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t2"}}
+{"timestamp":"2026-01-01T00:00:09.000Z","type":"event_msg","payload":{"type":"turn_aborted","reason":"interrupted"}}
+{"timestamp":"2026-01-01T00:00:10.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t3"}}
+{"timestamp":"2026-01-01T00:00:11.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t3","error":{"message":"synthetic api error"}}}
+{"timestamp":"2026-01-01T00:00:12.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t4"}}
+{"timestamp":"2026-01-01T00:00:13.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"CollabAgentToolCall","tool":"spawn_agent","receiver_agents":[{"thread_id":"00000000-0000-4000-8000-0000000000c1","agent_nickname":"Sartre"}],"agents_states":{"00000000-0000-4000-8000-0000000000c1":"pending_init"}}}}
+{"timestamp":"2026-01-01T00:00:14.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"CollabAgentToolCall","tool":"wait","agents_states":{"00000000-0000-4000-8000-0000000000c1":{"completed":"ok"}}}}}
+{"timestamp":"2026-01-01T00:00:15.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t4"}}

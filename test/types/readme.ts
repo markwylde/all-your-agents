@@ -1,6 +1,12 @@
 import type { Session, SessionActivity, SessionEvent, Subagent, Turn } from '../../src/index.js';
-import AllYourAgents, { builtInProviders, claudeCode, grokBuild } from '../../src/index.js';
+import AllYourAgents, {
+	builtInProviders,
+	claudeCode,
+	codexCli,
+	grokBuild,
+} from '../../src/index.js';
 import {
+	createCodexFixtureDriver,
 	createGrokFixtureDriver,
 	createMemoryHarness,
 	defineConformanceTests,
@@ -11,6 +17,7 @@ const aya = AllYourAgents({
 		...builtInProviders,
 		claudeCode({ home: '/tmp/claude' }),
 		grokBuild({ home: '/tmp/grok' }),
+		codexCli({ home: '/tmp/codex' }),
 	],
 	debounce: { quietMs: 25, maxLatencyMs: 1000 },
 });
@@ -38,6 +45,11 @@ defineConformanceTests({
 	name: 'grok-build',
 	provider: grokBuild({ home: '/tmp/grok' }),
 	driver: createGrokFixtureDriver('/tmp/grok'),
+});
+defineConformanceTests({
+	name: 'codex-cli',
+	provider: codexCli({ home: '/tmp/codex' }),
+	driver: createCodexFixtureDriver('/tmp/codex'),
 });
 void AllYourAgents({ providers: [claudeCode()] });
 

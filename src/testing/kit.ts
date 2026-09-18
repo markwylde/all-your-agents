@@ -13,6 +13,15 @@ export type ConformanceOptions = {
 	processes?: Processes;
 };
 
+async function wait(ms: number, pred: () => boolean): Promise<void> {
+	const start = Date.now();
+	while (Date.now() - start < ms) {
+		if (pred()) return;
+		await new Promise((r) => setTimeout(r, 15));
+	}
+	throw new Error('timeout');
+}
+
 /** Session ids are UUIDs, as real harnesses write them. */
 const ID = {
 	s1: '00000000-0000-4000-8000-000000000001',
@@ -84,6 +93,40 @@ export function defineConformanceTests(opts: ConformanceOptions): void {
 		await new Promise((r) => setTimeout(r, 30));
 		assert.ok(events.some((e) => e.startsWith(`start:${fg.subagentId}`)));
 		assert.ok(events.some((e) => e.includes(nested.subagentId)));
+		await aya.stop();
+	});
+
+	test(`${opts.name}: create vs open and close retains history`, async () => {
+		const aya = AllYourAgents({ providers: [opts.provider], processes });
+		const events: string[] = [];
+		aya.on('session:create', (s) => events.push(`create:${s.id}`));
+		aya.on('session:open', (s) => events.push(`open:${s.id}`));
+		aya.on('session:close', (s) => events.push(`close:${s.id}`));
+		await aya.start();
+		const id = '00000000-0000-4000-8000-000000000010';
+		await opts.driver.createLiveSession({ id, pid: 10, status: 'idle', title: 'Kit title' });
+		await wait(2000, () => events.some((e) => e.endsWith(id)));
+		await opts.driver.remove(id);
+		await wait(2000, () => events.includes(`close:${id}`));
+		const listed = await aya.sessions();
+		assert.ok(listed.some((s) => s.id === id));
+		await aya.stop();
+	});
+
+	test(`${opts.name}: conversation switch is close then open`, async () => {
+		const aya = AllYourAgents({ providers: [opts.provider], processes });
+		const events: string[] = [];
+		aya.on('session:create', (s) => events.push(`create:${s.id}`));
+		aya.on('session:open', (s) => events.push(`open:${s.id}`));
+		aya.on('session:close', (s) => events.push(`close:${s.id}`));
+		await aya.start();
+		const a = '00000000-0000-4000-8000-000000000011';
+		const b = '00000000-0000-4000-8000-000000000012';
+		await opts.driver.createLiveSession({ id: a, pid: 11, status: 'idle' });
+		await wait(2000, () => aya.running().some((s) => s.id === a));
+		await opts.driver.switchConversation(11, b);
+		await wait(2000, () => events.includes(`close:${a}`) && aya.running().some((s) => s.id === b));
+		assert.ok(events.indexOf(`close:${a}`) < events.findIndex((e) => e.endsWith(b)));
 		await aya.stop();
 	});
 

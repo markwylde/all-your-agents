@@ -1,0 +1,22 @@
+{
+	"status": {
+		"status": "idle"
+	},
+	"facts": [
+		"turn-started",
+		"tool-started",
+		"tool-finished",
+		"turn-ended",
+		"turn-started",
+		"turn-ended",
+		"turn-started",
+		"turn-ended",
+		"turn-started",
+		"turn-ended"
+	],
+	"activity": {
+		"openSubagents": 0,
+		"lastTurn": "completed",
+		"lastTurnEndedAt": 1767225615000
+	}
+}

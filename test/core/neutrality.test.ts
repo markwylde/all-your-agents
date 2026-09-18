@@ -16,7 +16,7 @@ function walk(dir: string): string[] {
 	return out;
 }
 
-const HARNESS_HOMES = /\.claude|\.grok|GROK_HOME/;
+const HARNESS_HOMES = /\.claude|\.grok|GROK_HOME|\.codex|CODEX_HOME/;
 
 test('core does not import providers or mention a harness home', () => {
 	const files = walk(join(src, 'core'));
@@ -49,6 +49,8 @@ test('neutrality test fails when a violation is introduced', () => {
 	assert.ok(/providers\//.test(fakeCore) && HARNESS_HOMES.test(fakeCore));
 	assert.ok(HARNESS_HOMES.test(`const home = join(homedir(), '.grok');`));
 	assert.ok(HARNESS_HOMES.test('process.env.GROK_HOME'));
+	assert.ok(HARNESS_HOMES.test(`const home = join(homedir(), '.codex');`));
+	assert.ok(HARNESS_HOMES.test('process.env.CODEX_HOME'));
 	const fakeProvider = `import { readFile } from 'node:fs';\nimport { exec } from 'node:child_process';\n`;
 	assert.ok(/from ['"]node:fs['"]/.test(fakeProvider));
 	assert.ok(/from ['"]node:child_process['"]/.test(fakeProvider));

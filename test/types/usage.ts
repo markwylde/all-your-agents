@@ -1,5 +1,6 @@
 import type { Fs, Processes } from '../../src/helpers/types.js';
 import type { Provider, WatchContext } from '../../src/provider.js';
+import { codexCli } from '../../src/providers/codex-cli/index.js';
 import { grokBuild } from '../../src/providers/grok-build/index.js';
 import type {
 	EventMeta,
@@ -104,3 +105,6 @@ void provider;
 const grok: Provider = grokBuild({ home: '/tmp/grok' });
 const grokHarness: Harness = grok.harness;
 void grokHarness;
+
+const codex: Provider = codexCli({ home: '/tmp/codex' });
+void codex.harness;

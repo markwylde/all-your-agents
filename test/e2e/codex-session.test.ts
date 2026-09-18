@@ -1,27 +1,26 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AllYourAgents, claudeCode } from '../../src/index.js';
+import { AllYourAgents, codexCli } from '../../src/index.js';
 import { measureCost } from './cost.js';
 import {
-	isolatedClaudeHome,
+	isolatedCodexHome,
 	liveEnabled,
+	requireCodex,
 	rmQuiet,
-	startBackgroundClaude,
-	stopBackgroundClaude,
-	stubProcesses,
+	startExecCodex,
 	waitUntil,
 } from './helpers.js';
 
-test('haiku --bg: live create/open, status, close', async (t) => {
+test('codex exec: live create/open, status, close, then history', async (t) => {
 	if (!liveEnabled()) {
 		t.skip('set AYA_LIVE=1 and OPENROUTER_API_KEY');
 		return;
 	}
-	await measureCost('live create/status/close', async () => {
-		const { home, cwd } = await isolatedClaudeHome();
+	requireCodex();
+	await measureCost('codex create/status/close', async () => {
+		const { home, cwd } = await isolatedCodexHome();
 		const aya = AllYourAgents({
-			providers: [claudeCode({ home })],
-			processes: stubProcesses,
+			providers: [codexCli({ home })],
 			debounce: { quietMs: 15 },
 		});
 		const log: string[] = [];
@@ -29,42 +28,39 @@ test('haiku --bg: live create/open, status, close', async (t) => {
 		aya.on('session:open', (s) => log.push(`open:${s.id}`));
 		aya.on('session:status', (s) => log.push(`status:${s.status}`));
 		aya.on('session:close', () => log.push('close'));
-
 		await aya.start();
-		const { child, id } = startBackgroundClaude(
+		const run = startExecCodex(
 			home,
 			cwd,
-			'Reply with the single word PONG. Then stop.',
+			'This is an automated test. Do not think at length. Reply with the single word PONG, then stop.',
 		);
-		let bgId = '';
 		try {
-			bgId = await id;
 			await waitUntil(
 				() => log.some((l) => l.startsWith('create:') || l.startsWith('open:')),
-				30_000,
+				20_000,
 				() => log.join(' | '),
 			);
 			await waitUntil(
 				() => log.some((l) => l.startsWith('status:')),
-				30_000,
+				20_000,
+				() => log.join(' | '),
+			);
+			const result = await run.done;
+			assert.equal(result.code, 0, result.output);
+			await waitUntil(
+				() => log.includes('close'),
+				8_000,
 				() => log.join(' | '),
 			);
 			const startOfToday = new Date();
 			startOfToday.setHours(0, 0, 0, 0);
 			const listed = await aya.sessions({ since: startOfToday.getTime() });
-			assert.ok(listed.length >= 1);
+			assert.ok(listed.some((s) => s.harness === 'Codex' && s.kind === 'headless'));
 		} finally {
-			if (bgId) stopBackgroundClaude(home, bgId);
-			await waitUntil(
-				() => log.includes('close'),
-				15_000,
-				() => log.join(' | '),
-			).catch(() => {});
-			child.kill();
+			run.child.kill();
 			await aya.stop();
 			await rmQuiet(home);
 			await rmQuiet(cwd);
 		}
-		assert.ok(log.includes('close') || log.some((l) => l.startsWith('status:')));
 	});
 });
