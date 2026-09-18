@@ -29,23 +29,27 @@ test('codex exec: live create/open, status, close, then history', async (t) => {
 		aya.on('session:status', (s) => log.push(`status:${s.status}`));
 		aya.on('session:close', () => log.push('close'));
 		await aya.start();
-		const run = startExecCodex(home, cwd, 'Reply with the single word PONG. Then stop.');
+		const run = startExecCodex(
+			home,
+			cwd,
+			'This is an automated test. Do not think at length. Reply with the single word PONG, then stop.',
+		);
 		try {
 			await waitUntil(
 				() => log.some((l) => l.startsWith('create:') || l.startsWith('open:')),
-				60_000,
+				20_000,
 				() => log.join(' | '),
 			);
 			await waitUntil(
 				() => log.some((l) => l.startsWith('status:')),
-				60_000,
+				20_000,
 				() => log.join(' | '),
 			);
 			const result = await run.done;
 			assert.equal(result.code, 0, result.output);
 			await waitUntil(
 				() => log.includes('close'),
-				30_000,
+				8_000,
 				() => log.join(' | '),
 			);
 			const startOfToday = new Date();

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const THREE_AGENT_PROMPT =
-	'You MUST invoke the Agent tool exactly 3 times in this turn, in parallel. Each invocation: subagent_type=general-purpose. Prompts: (1) Reply with only the word ALPHA and stop. (2) Reply with only the word BETA and stop. (3) Reply with only the word GAMMA and stop. Do not write any user-facing text until all three tool results return. Then output DONE.';
+	'This is an automated test. Do not plan or think at length. You MUST invoke the Agent tool exactly 3 times in this turn, in parallel. Each invocation: subagent_type=general-purpose. Prompts: (1) Reply with only the word ALPHA and stop. (2) Reply with only the word BETA and stop. (3) Reply with only the word GAMMA and stop. Do not write any user-facing text until all three tool results return. Then output DONE.';
 
 export function loadDotenv(): void {
 	const roots = [
@@ -290,10 +290,14 @@ export function startPrintGrok(
 }
 
 export const THREE_GROK_AGENT_PROMPT =
-	'You MUST call spawn_subagent exactly 3 times in this turn, in parallel, each with subagent_type=general-purpose and no background. Prompts: (1) Reply with only the word ALPHA. (2) Reply with only the word BETA. (3) Reply with only the word GAMMA. Wait for all three results, then output DONE.';
+	'This is an automated test. Do not plan or think at length. You MUST call spawn_subagent exactly 3 times in this turn, in parallel, each with subagent_type=general-purpose and no background. Prompts: (1) Reply with only the word ALPHA. (2) Reply with only the word BETA. (3) Reply with only the word GAMMA. Wait for all three results, then output DONE.';
 
 export function e2eCodexModel(): string {
 	return process.env.AYA_E2E_CODEX_MODEL ?? 'x-ai/grok-4.6';
+}
+
+export function e2eCodexEffort(): string {
+	return process.env.AYA_E2E_CODEX_EFFORT ?? 'low';
 }
 
 export async function isolatedCodexHome(): Promise<{ home: string; cwd: string }> {
@@ -304,6 +308,7 @@ export async function isolatedCodexHome(): Promise<{ home: string; cwd: string }
 		[
 			`model = ${JSON.stringify(e2eCodexModel())}`,
 			'model_provider = "openrouter"',
+			`model_reasoning_effort = ${JSON.stringify(e2eCodexEffort())}`,
 			'approval_policy = "never"',
 			'sandbox_mode = "danger-full-access"',
 			'',
@@ -345,6 +350,8 @@ export function startExecCodex(
 			'-s',
 			'danger-full-access',
 			'--dangerously-bypass-approvals-and-sandbox',
+			'-c',
+			`model_reasoning_effort=${JSON.stringify(e2eCodexEffort())}`,
 			'-m',
 			e2eCodexModel(),
 			'-C',
@@ -368,4 +375,4 @@ export function startExecCodex(
 }
 
 export const THREE_CODEX_AGENT_PROMPT =
-	'Spawn three collab agents in parallel. Each must reply with only one word: ALPHA, BETA, and GAMMA. Wait until all three finish, then output DONE.';
+	'This is an automated test. Do not plan or think at length. Spawn three collab agents in parallel immediately. Each must reply with only one word: ALPHA, BETA, and GAMMA. Wait until all three finish, then output DONE and stop.';

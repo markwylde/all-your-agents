@@ -33,7 +33,7 @@ test('codex exec: three collab subagents start and end', async (t) => {
 		try {
 			await waitUntil(
 				() => starts.length >= 3 && ends.length >= 3,
-				240_000,
+				25_000,
 				() => `starts=${starts.length} ends=${ends.length}`,
 			);
 			const result = await run.done;
