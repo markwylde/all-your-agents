@@ -2,8 +2,9 @@ import type { AllYourAgents as Instance } from './core/instance.ts';
 import { createAllYourAgents } from './core/instance.ts';
 import type { InstanceOptions } from './provider.ts';
 import { claudeCode } from './providers/claude-code/index.ts';
+import { grokBuild } from './providers/grok-build/index.ts';
 
-export const builtInProviders = [claudeCode()];
+export const builtInProviders = [claudeCode(), grokBuild()];
 
 export function AllYourAgents(opts: InstanceOptions = {}): Instance {
 	return createAllYourAgents({
@@ -12,7 +13,7 @@ export function AllYourAgents(opts: InstanceOptions = {}): Instance {
 	});
 }
 
-export { claudeCode };
+export { claudeCode, grokBuild };
 
 export default AllYourAgents;
 

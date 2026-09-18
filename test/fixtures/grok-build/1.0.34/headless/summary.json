@@ -1,0 +1,18 @@
+{
+	"info": {
+		"id": "01a0b545-974a-78c2-9db5-79132dcc8877",
+		"cwd": "/tmp/app"
+	},
+	"session_summary": "",
+	"created_at": "2026-09-18T16:07:11.956891Z",
+	"updated_at": "2026-09-18T16:07:14.729935Z",
+	"num_messages": 3,
+	"num_chat_messages": 7,
+	"current_model_id": "x-ai/grok-4.6",
+	"next_trace_turn": 1,
+	"chat_format_version": 1,
+	"session_kind": "headless",
+	"last_active_at": "2026-09-18T16:07:14.729935Z",
+	"agent_name": "grok-build-plan",
+	"sandbox_profile": "off"
+}

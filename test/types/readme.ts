@@ -1,9 +1,17 @@
 import type { Session, SessionActivity, SessionEvent, Subagent, Turn } from '../../src/index.js';
-import AllYourAgents, { builtInProviders, claudeCode } from '../../src/index.js';
-import { createMemoryHarness, defineConformanceTests } from '../../src/testing/index.js';
+import AllYourAgents, { builtInProviders, claudeCode, grokBuild } from '../../src/index.js';
+import {
+	createGrokFixtureDriver,
+	createMemoryHarness,
+	defineConformanceTests,
+} from '../../src/testing/index.js';
 
 const aya = AllYourAgents({
-	providers: [...builtInProviders, claudeCode({ home: '/tmp/claude' })],
+	providers: [
+		...builtInProviders,
+		claudeCode({ home: '/tmp/claude' }),
+		grokBuild({ home: '/tmp/grok' }),
+	],
 	debounce: { quietMs: 25, maxLatencyMs: 1000 },
 });
 
@@ -26,6 +34,12 @@ void aya.reconcile(1);
 
 const mem = createMemoryHarness();
 defineConformanceTests({ name: 'memory', provider: mem.provider, driver: mem.driver });
+defineConformanceTests({
+	name: 'grok-build',
+	provider: grokBuild({ home: '/tmp/grok' }),
+	driver: createGrokFixtureDriver('/tmp/grok'),
+});
+void AllYourAgents({ providers: [claudeCode()] });
 
 type _Turn = Turn;
 type _Event = SessionEvent;

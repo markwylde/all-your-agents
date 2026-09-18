@@ -1,0 +1,17 @@
+{
+	"subagent_id": "01a0b549-12ef-70a2-a731-9fc66ecd2505",
+	"parent_session_id": "01a0b546-2e0f-7b43-8ed1-79d3540935ed",
+	"child_session_id": "01a0b549-12ef-70a2-a731-9fc66ecd2505",
+	"subagent_type": "general-purpose",
+	"description": "Task 3",
+	"prompt": "Scrubbed prompt 4.",
+	"status": "completed",
+	"started_at": "2026-09-18T16:11:00.215610Z",
+	"completed_at": "2026-09-18T16:11:02.116801Z",
+	"duration_ms": 1905,
+	"tool_calls": 0,
+	"turns": 1,
+	"effective_context_source": "new",
+	"child_cwd": "/tmp/app",
+	"effective_model_id": "e2e"
+}

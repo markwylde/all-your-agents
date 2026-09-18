@@ -18,9 +18,11 @@ test('npm pack installs and imports both entry points', async (t) => {
 		const tgz = execFileSync('sh', ['-c', 'ls *.tgz'], { cwd: dir, encoding: 'utf8' }).trim();
 		execFileSync('npm', ['init', '-y'], { cwd: dir, stdio: 'pipe' });
 		execFileSync('npm', ['install', join(dir, tgz)], { cwd: dir, stdio: 'pipe' });
-		const src = `import aya, { builtInProviders } from '@markwylde/all-your-agents';
-import { defineConformanceTests } from '@markwylde/all-your-agents/testing';
-if (!builtInProviders.length) throw new Error('no providers');
+		const src = `import aya, { builtInProviders, grokBuild } from '@markwylde/all-your-agents';
+import { createGrokFixtureDriver, defineConformanceTests } from '@markwylde/all-your-agents/testing';
+if (builtInProviders.length !== 2) throw new Error('providers');
+if (!builtInProviders.some((p) => p.id === 'grok-build')) throw new Error('grok');
+if (typeof grokBuild !== 'function' || typeof createGrokFixtureDriver !== 'function') throw new Error('grok exports');
 if (typeof aya !== 'function') throw new Error('default');
 if (typeof defineConformanceTests !== 'function') throw new Error('testing');
 `;
@@ -31,11 +33,14 @@ if (typeof defineConformanceTests !== 'function') throw new Error('testing');
 		assert.equal(existsSync(join(dir, 'node_modules', '.bin', 'aya')), false);
 		const version = execFileSync(bin, ['--version'], { cwd: dir, encoding: 'utf8' });
 		assert.match(version, /^\d+\.\d+\.\d+/);
-		const home = join(dir, 'claude-home');
 		const json = execFileSync(bin, ['--json'], {
 			cwd: dir,
 			encoding: 'utf8',
-			env: { ...process.env, CLAUDE_CONFIG_DIR: home },
+			env: {
+				...process.env,
+				CLAUDE_CONFIG_DIR: join(dir, 'claude-home'),
+				GROK_HOME: join(dir, 'grok-home'),
+			},
 		});
 		assert.deepEqual(JSON.parse(json), []);
 		assert.ok(true);

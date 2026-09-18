@@ -1,0 +1,34 @@
+{
+	"title": "Fixture session",
+	"model": "x-ai/grok-4.6",
+	"status": "idle",
+	"subagents": [
+		{
+			"id": "01a0b549-12ef-70a2-a731-9fc66ecd2505",
+			"sessionId": "01a0b546-2e0f-7b43-8ed1-79d3540935ed",
+			"harness": "Grok",
+			"type": "general-purpose",
+			"background": false,
+			"status": "completed",
+			"title": "Task 3"
+		},
+		{
+			"id": "01a0b549-12ef-70a2-a731-9fdf2a3fc7b1",
+			"sessionId": "01a0b546-2e0f-7b43-8ed1-79d3540935ed",
+			"harness": "Grok",
+			"type": "general-purpose",
+			"background": true,
+			"status": "completed",
+			"title": "Task 4"
+		},
+		{
+			"id": "01a0b549-3b7d-74d0-af87-8e8adcf83223",
+			"sessionId": "01a0b546-2e0f-7b43-8ed1-79d3540935ed",
+			"harness": "Grok",
+			"type": "general-purpose",
+			"background": false,
+			"status": "completed",
+			"title": "Task 5"
+		}
+	]
+}

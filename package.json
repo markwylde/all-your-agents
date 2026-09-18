@@ -36,6 +36,8 @@
   "keywords": [
     "agents",
     "claude-code",
+    "grok",
+    "grok-build",
     "sessions"
   ],
   "author": "Mark Wylde",

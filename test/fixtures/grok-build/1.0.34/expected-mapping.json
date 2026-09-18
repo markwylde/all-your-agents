@@ -1,0 +1,119 @@
+[
+	{
+		"kind": "user",
+		"text": "Scrubbed prompt 1."
+	},
+	{
+		"kind": "tool",
+		"id": "call-d17c0341-cefc-415e-a6a3-a57c8f71ce93-0",
+		"name": "run_terminal_command"
+	},
+	{
+		"kind": "tool-result",
+		"id": "call-d17c0341-cefc-415e-a6a3-a57c8f71ce93-0",
+		"isError": false
+	},
+	{
+		"kind": "assistant",
+		"text": "Scrubbed reply.",
+		"model": "x-ai/grok-4.6"
+	},
+	{
+		"kind": "user",
+		"text": "Scrubbed prompt 2."
+	},
+	{
+		"kind": "tool",
+		"id": "call-e2839ef5-c6b0-4c7d-a699-f65f3cc357aa-1",
+		"name": "run_terminal_command"
+	},
+	{
+		"kind": "tool-result",
+		"id": "call-e2839ef5-c6b0-4c7d-a699-f65f3cc357aa-1",
+		"isError": false
+	},
+	{
+		"kind": "assistant",
+		"text": "Scrubbed reply.",
+		"model": "x-ai/grok-4.6"
+	},
+	{
+		"kind": "user",
+		"text": "Scrubbed prompt 3."
+	},
+	{
+		"kind": "tool",
+		"id": "call-8b8227da-6032-43b7-a1eb-bcdf9ca36a66-2",
+		"name": "spawn_subagent"
+	},
+	{
+		"kind": "subagent",
+		"id": "call-8b8227da-6032-43b7-a1eb-bcdf9ca36a66-2",
+		"title": "Task 3",
+		"type": "general-purpose",
+		"background": false
+	},
+	{
+		"kind": "tool",
+		"id": "call-8b8227da-6032-43b7-a1eb-bcdf9ca36a66-3",
+		"name": "spawn_subagent"
+	},
+	{
+		"kind": "subagent",
+		"id": "call-8b8227da-6032-43b7-a1eb-bcdf9ca36a66-3",
+		"title": "Task 4",
+		"type": "general-purpose",
+		"background": true
+	},
+	{
+		"kind": "tool-result",
+		"id": "call-8b8227da-6032-43b7-a1eb-bcdf9ca36a66-3",
+		"isError": false
+	},
+	{
+		"kind": "tool-result",
+		"id": "call-8b8227da-6032-43b7-a1eb-bcdf9ca36a66-2",
+		"isError": false
+	},
+	{
+		"kind": "subagent-end",
+		"id": "call-8b8227da-6032-43b7-a1eb-bcdf9ca36a66-2",
+		"status": "completed"
+	},
+	{
+		"kind": "assistant",
+		"text": "Scrubbed reply.",
+		"model": "x-ai/grok-4.6"
+	},
+	{
+		"kind": "user",
+		"text": "Scrubbed prompt 6."
+	},
+	{
+		"kind": "tool",
+		"id": "call-979a3eee-0fca-44df-868c-67574c9c56d8-4",
+		"name": "spawn_subagent"
+	},
+	{
+		"kind": "subagent",
+		"id": "call-979a3eee-0fca-44df-868c-67574c9c56d8-4",
+		"title": "Task 5",
+		"type": "general-purpose",
+		"background": false
+	},
+	{
+		"kind": "tool-result",
+		"id": "call-979a3eee-0fca-44df-868c-67574c9c56d8-4",
+		"isError": false
+	},
+	{
+		"kind": "subagent-end",
+		"id": "call-979a3eee-0fca-44df-868c-67574c9c56d8-4",
+		"status": "completed"
+	},
+	{
+		"kind": "assistant",
+		"text": "Scrubbed reply.",
+		"model": "x-ai/grok-4.6"
+	}
+]
