@@ -4,6 +4,8 @@ import { phaseStatus } from './status.ts';
 /** What `events.jsonl` has said so far about the current turn. */
 export type EventsState = {
 	turnOpen: boolean;
+	/** When the open turn started, from its `turn_started`. */
+	turnStartedAt?: number;
 	phase?: string;
 	/** Tool named by the latest `permission_requested`. */
 	waitingFor?: string;
@@ -55,6 +57,7 @@ export function reduceEvent(state: EventsState, rec: unknown): TurnFact[] {
 	switch (row.type) {
 		case 'turn_started':
 			state.turnOpen = true;
+			state.turnStartedAt = at;
 			delete state.phase;
 			delete state.waitingFor;
 			state.openTools = [];
