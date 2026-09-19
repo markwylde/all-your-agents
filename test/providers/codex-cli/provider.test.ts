@@ -455,14 +455,14 @@ test('append to a known child does not call holders', async () => {
 		const start = Date.now() - 1000;
 		const procs = fakeCodexProcesses(start);
 		procs.set(8, true, start);
+		const parent = rolloutPath(home, A);
+		const child = rolloutPath(home, B);
 		let holderCalls = 0;
 		const inner = procs.holders?.bind(procs);
 		procs.holders = async (path) => {
-			holderCalls++;
+			if (path === child) holderCalls++;
 			return inner ? inner(path) : [];
 		};
-		const parent = rolloutPath(home, A);
-		const child = rolloutPath(home, B);
 		await writeRollout(parent, [sessionMeta(A), eventMsg('task_started')]);
 		await writeRollout(child, [
 			sessionMeta(B, {
@@ -484,6 +484,8 @@ test('append to a known child does not call holders', async () => {
 		aya.on('subagent:end', (s) => ends.push(`${s.id}:${s.status}`));
 		await aya.start();
 		await waitFor(() => aya.running().some((s) => s.id === A));
+		// FSEvents can deliver the files' creation late; let that settle first.
+		await sleep(500);
 		const before = holderCalls;
 		await appendFile(child, `${JSON.stringify(eventMsg('task_complete'))}\n`);
 		await waitFor(() => ends.includes(`${B}:completed`));
