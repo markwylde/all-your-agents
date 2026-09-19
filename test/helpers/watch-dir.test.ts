@@ -95,8 +95,10 @@ test('a change to one of fifty entries reads only that entry', async () => {
 		const before = stats.length;
 		await writeFile(join(dir, '7.json'), '{"x":1}');
 		await sleep(80);
-		const after = stats.slice(before).filter((p) => p.endsWith('.json'));
-		assert.deepEqual(after, [join(dir, '7.json')]);
+		// Under load one write can arrive as two notifications, so 7.json may be read twice;
+		// what matters is that none of the other 49 are read.
+		const after = new Set(stats.slice(before).filter((p) => p.endsWith('.json')));
+		assert.deepEqual([...after], [join(dir, '7.json')]);
 		w.close();
 	});
 });

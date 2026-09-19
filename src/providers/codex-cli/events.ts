@@ -3,6 +3,8 @@ import { type CollabHint, parseCollabItem } from './subagents.ts';
 
 export type EventsState = {
 	turnOpen: boolean;
+	/** When the open turn started, if its record had a timestamp. */
+	turnStartedAt?: number;
 	activityOpen: boolean;
 	openTools: string[];
 	model?: string;
@@ -97,6 +99,20 @@ function settingsCwd(payload: Record<string, unknown>): string | undefined {
  * Apply one rollout record. Lifecycle `event_msg` starts/ends turns; `response_item`
  * tool calls start/finish tools. `item_completed` never starts or finishes a tool.
  */
+/**
+ * A turn left open by a process that was killed or crashed never gets its end record. If
+ * replay leaves open a turn that started before the process now holding the thread, that
+ * turn is over: end it as interrupted at the process start.
+ */
+export function endStaleTurn(state: EventsState, processStart: number | undefined): TurnFact[] {
+	if (!state.turnOpen || processStart == null || state.turnStartedAt == null) return [];
+	if (state.turnStartedAt >= processStart) return [];
+	state.turnOpen = false;
+	state.openTools = [];
+	state.activityOpen = false;
+	return [{ type: 'turn-ended', outcome: 'interrupted', endedAt: processStart }];
+}
+
 export function reduceRecord(state: EventsState, rec: unknown): TurnFact[] {
 	const env = envelope(rec);
 	if (!env) return [];
@@ -105,6 +121,7 @@ export function reduceRecord(state: EventsState, rec: unknown): TurnFact[] {
 		const kind = eventMsgType(payload);
 		if (kind === 'task_started' || kind === 'turn_started') {
 			state.turnOpen = true;
+			state.turnStartedAt = at;
 			state.activityOpen = true;
 			state.openTools = [];
 			return [{ type: 'turn-started', at }];
