@@ -11,15 +11,20 @@ import {
 	A,
 	appendTranscript,
 	assistant,
+	asyncResult,
 	B,
+	backgrounded,
 	C,
 	fakeOmpProcesses,
 	header,
+	hubResult,
 	launch,
 	lines,
 	presencePath,
 	sessionPath,
 	slot,
+	toolCall,
+	toolResult,
 	user,
 	withHome,
 	writeBreadcrumb,
@@ -559,5 +564,153 @@ test('ordering: exit while the backlog is read, and stop while binding, leave no
 			.filter(([, n]) => n > 0)
 			.map(([p, n]) => `${p.replace(home, '~')}x${n}`);
 		assert.equal(watching, 0, still.join(' '));
+	});
+});
+
+/** `session:status` for one session, as `status:waitingFor`. */
+function statuses(aya: ReturnType<typeof observe>['aya'], id: string): string[] {
+	const seen: string[] = [];
+	aya.on('session:status', (s) => {
+		if (s.id === id) seen.push(`${s.status}:${s.waitingFor ?? ''}`);
+	});
+	return seen;
+}
+
+const bashJob = (jobId: string, at?: number) => [
+	assistant('toolUse', [toolCall(`call-${jobId}`, 'bash')], {}, at),
+	backgrounded(`call-${jobId}`, jobId, at),
+];
+
+test('background bash: waiting on the shell after the turn, running when woken, then idle', async () => {
+	await withHome(async (home) => {
+		const procs = fakeOmpProcesses();
+		const { aya, live } = observe(home, procs);
+		await aya.start();
+		const path = await launch(home, procs, {
+			id: A,
+			pid: 80,
+			terminal: 'ttys080',
+			records: [user('run it')],
+		});
+		await waitFor(() => live(A)?.status === 'running');
+		const seen = statuses(aya, A);
+		await appendTranscript(path, [...bashJob('bg_1'), assistant('stop')]);
+		await waitFor(() => live(A)?.status === 'waiting');
+		assert.equal(live(A)?.waitingFor, 'shell');
+		assert.equal(live(A)?.activity.lastTurn, 'completed');
+		assert.deepEqual(seen, ['waiting:shell']);
+
+		// The job reports and omp wakes the agent with its output.
+		await appendTranscript(path, [
+			asyncResult(['bg_1']),
+			assistant('toolUse', [toolCall('r1', 'read')]),
+		]);
+		await waitFor(() => live(A)?.status === 'running');
+		assert.equal(live(A)?.waitingFor, undefined);
+		await appendTranscript(path, [toolResult('r1', 'read'), assistant('stop')]);
+		await waitFor(() => live(A)?.status === 'idle');
+		assert.deepEqual(seen.slice(-2), ['running:', 'idle:']);
+		assert.equal(seen.filter((s) => s === 'waiting:shell').length, 1);
+		await aya.stop();
+	});
+});
+
+test('background bash: a hub result that collects the job leaves the next turn end idle', async () => {
+	await withHome(async (home) => {
+		const procs = fakeOmpProcesses();
+		const { aya, live } = observe(home, procs);
+		await aya.start();
+		const path = await launch(home, procs, {
+			id: A,
+			pid: 81,
+			terminal: 'ttys081',
+			records: [user('run it')],
+		});
+		await waitFor(() => live(A)?.status === 'running');
+		const seen = statuses(aya, A);
+		await appendTranscript(path, [
+			...bashJob('bg_1'),
+			assistant('toolUse', [toolCall('h1', 'hub')]),
+			hubResult('h1', { bg_1: 'running' }),
+			assistant('stop'),
+		]);
+		await waitFor(() => live(A)?.status === 'waiting');
+		await appendTranscript(path, [
+			user('is it done?'),
+			assistant('toolUse', [toolCall('h2', 'hub')]),
+			hubResult('h2', { bg_1: 'completed' }),
+			assistant('stop'),
+		]);
+		await waitFor(() => live(A)?.status === 'idle');
+		assert.deepEqual(seen, ['waiting:shell', 'running:', 'idle:']);
+		await aya.stop();
+	});
+});
+
+test('background task agent: not a shell job, the turn end is idle and the agent runs on', async () => {
+	await withHome(async (home) => {
+		const procs = fakeOmpProcesses();
+		const { aya, live } = observe(home, procs);
+		await aya.start();
+		const path = await launch(home, procs, {
+			id: A,
+			pid: 82,
+			terminal: 'ttys082',
+			records: [user('delegate it')],
+		});
+		await waitFor(() => live(A)?.status === 'running');
+		const seen = statuses(aya, A);
+		await writeTranscript(join(path.slice(0, -'.jsonl'.length), 'PowTwoTen.jsonl'), [
+			slot(),
+			header(B, { parentSession: path }),
+			user('Compute it'),
+		]);
+		await waitFor(() => live(A)?.activity.openSubagents === 1);
+		await appendTranscript(path, [
+			assistant('toolUse', [toolCall('c1', 'task')]),
+			toolResult('c1', 'task', {
+				progress: [{ id: 'PowTwoTen', agent: 'sonic', status: 'pending' }],
+				async: { state: 'running', jobId: 'PowTwoTen', type: 'task' },
+			}),
+			assistant('stop'),
+		]);
+		await waitFor(() => live(A)?.status === 'idle');
+		assert.deepEqual(seen, ['idle:']);
+		const agents = await live(A)?.subagents();
+		assert.ok(agents?.length === 1 && agents[0]?.status === 'running');
+		await aya.stop();
+	});
+});
+
+test('bind: a job still running is waited on; one from an earlier process is dropped', async () => {
+	await withHome(async (home) => {
+		const procs = fakeOmpProcesses();
+		const now = Date.now();
+		const transcript = (at: number) => [
+			user('run it', at),
+			...bashJob('bg_1', at),
+			assistant('stop', undefined, {}, at),
+		];
+		// A's job was started by the process now on it. B's predates its process: it died with
+		// the one that started it, which never got to write `session_exit`.
+		await launch(home, procs, { id: A, pid: 83, terminal: 'ttys083', records: transcript(now) });
+		await launch(home, procs, {
+			id: B,
+			pid: 84,
+			terminal: 'ttys084',
+			records: transcript(now - 3600_000),
+		});
+		const { aya, live } = observe(home, procs);
+		const seenA = statuses(aya, A);
+		const seenB = statuses(aya, B);
+		await aya.start();
+		assert.equal(live(A)?.status, 'waiting');
+		assert.equal(live(A)?.waitingFor, 'shell');
+		assert.equal(live(B)?.status, 'idle');
+		assert.equal(live(B)?.waitingFor, undefined);
+		// Replay emits where it ended up, never the steps on the way.
+		assert.ok(seenA.every((s) => s === 'waiting:shell'));
+		assert.ok(seenB.every((s) => s === 'idle:'));
+		await aya.stop();
 	});
 });

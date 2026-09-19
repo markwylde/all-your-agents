@@ -12,6 +12,7 @@ import {
 	appendTranscript,
 	artifacts,
 	assistant,
+	backgrounded,
 	entry,
 	fakeOmpProcesses,
 	header,
@@ -139,6 +140,42 @@ test('background: a child outlives the turn; nested: its parent is the subagent 
 		await rm(presencePath(home, 310));
 		await waitFor(() => events.includes('end:ScoutCode.Inner:cancelled'));
 		assert.equal(events.filter((e) => e.startsWith('end:ScoutCode.Inner')).length, 1);
+		await aya.stop();
+	});
+});
+
+test('background: a child outlives a turn that ends waiting on a shell job, as it does an idle one', async () => {
+	await withHome(async (home) => {
+		const procs = fakeOmpProcesses();
+		const { aya, events, live } = observe(home, procs);
+		await aya.start();
+		const path = await launch(home, procs, {
+			id: A,
+			pid: 312,
+			terminal: 'ttys312',
+			records: [user('go')],
+		});
+		await waitFor(() => live(A));
+		const outer = join(artifacts(path), 'ScoutCode.jsonl');
+		await writeTranscript(outer, child(path, 1, 'scout'));
+		await waitFor(() => events.includes('start:ScoutCode:scout::fg'));
+
+		await appendTranscript(path, [
+			assistant('toolUse', [toolCall('call-1', 'bash')]),
+			backgrounded('call-1', 'bg_1'),
+			assistant('stop'),
+		]);
+		await waitFor(() => live(A)?.status === 'waiting');
+		assert.equal(live(A)?.waitingFor, 'shell');
+		assert.equal(live(A)?.activity.openSubagents, 1, 'the turn end does not cancel it');
+		const open = await live(A)?.subagents();
+		assert.ok(open?.length === 1 && open[0]?.status === 'running');
+
+		// It still ends on its own word, and the session goes on waiting for the job.
+		await appendTranscript(outer, yielded('ScoutCode'));
+		await waitFor(() => events.includes('end:ScoutCode:completed'));
+		assert.equal(live(A)?.status, 'waiting');
+		assert.deepEqual(events, ['start:ScoutCode:scout::fg', 'end:ScoutCode:completed']);
 		await aya.stop();
 	});
 });

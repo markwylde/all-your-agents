@@ -19,4 +19,11 @@ export type FixtureDriver = {
 	finishBackgroundSubagent(id: string, subagentId: string): Promise<void>;
 	launchNestedSubagent(id: string, parentSubagentId: string): Promise<{ subagentId: string }>;
 	relocateJournal(id: string, newCwd: string): Promise<void>;
+	/**
+	 * Ends the open turn with a background shell command still running, one the harness
+	 * will wake the session for. Absent when the harness records no such work.
+	 */
+	startBackgroundWait?(id: string): Promise<void>;
+	/** That command ends without waking the session. */
+	endBackgroundWait?(id: string): Promise<void>;
 };

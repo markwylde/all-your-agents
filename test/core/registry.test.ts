@@ -74,6 +74,35 @@ test('live registry: ordering, status dedupe, pid cleared, running()', async () 
 	await aya.stop();
 });
 
+test('a background wait keeps waitingFor until the session is running or idle again', async () => {
+	let emit: WatchContext['emit'] | undefined;
+	const aya = AllYourAgents({
+		providers: [
+			scripted((ctx) => {
+				emit = ctx.emit;
+				ctx.emit('session:create', { id: 'a', harness: 'Memory', provider: 'mem', pid: 1 });
+				ctx.emit('session:status', { id: 'a', status: 'waiting', waitingFor: 'shell' });
+			}),
+		],
+		processes: { info: async () => ({ alive: true }), watch: () => 'unsupported' },
+	});
+	const seen: string[] = [];
+	aya.on('session:status', (s) => seen.push(`${s.status}:${s.waitingFor ?? ''}`));
+	await aya.start();
+	assert.equal(aya.running()[0]?.waitingFor, 'shell');
+	assert.equal((await aya.get('a'))?.waitingFor, 'shell');
+	assert.equal((await aya.sessions({ live: true }))[0]?.waitingFor, 'shell');
+	// The same wait reported again is not a change; a wait on the user is.
+	emit?.('session:status', { id: 'a', status: 'waiting', waitingFor: 'shell' });
+	emit?.('session:status', { id: 'a', status: 'waiting', waitingFor: 'approve Bash' });
+	emit?.('session:status', { id: 'a', status: 'waiting', waitingFor: 'shell' });
+	emit?.('session:status', { id: 'a', status: 'idle' });
+	assert.deepEqual(seen, ['waiting:shell', 'waiting:approve Bash', 'waiting:shell', 'idle:']);
+	assert.equal('waitingFor' in (aya.running()[0] ?? {}), false);
+	assert.equal('waitingFor' in ((await aya.get('a')) ?? {}), false);
+	await aya.stop();
+});
+
 test('start is idempotent, ready once, catchUp then live', async () => {
 	let watches = 0;
 	const aya = AllYourAgents({

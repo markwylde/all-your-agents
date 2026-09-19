@@ -8,7 +8,15 @@ import { grokBuild } from '../../../src/providers/grok-build/index.js';
 import type { Subagent } from '../../../src/types.js';
 import { spyFs } from '../../util/spy-fs.js';
 import { sleep, waitFor } from '../../util/wait.js';
-import { entry, fakeProcesses, makeSession, user, writeIndex, writeMeta } from './home.js';
+import {
+	entry,
+	fakeProcesses,
+	makeSession,
+	tasksRow,
+	user,
+	writeIndex,
+	writeMeta,
+} from './home.js';
 
 const A = '01a0b474-0a8c-7002-b1fd-ff90b332cdc3';
 const S1 = '01a0b474-0a8c-7002-b1fd-ff90b332cd01';
@@ -92,6 +100,7 @@ async function live(
 		aya.on('subagent:end', (s) => events.push(`end:${s.id}:${s.status}`));
 		aya.on('session:create', (s) => events.push(`create:${s.id}`));
 		aya.on('session:open', (s) => events.push(`open:${s.id}`));
+		aya.on('session:status', (s) => events.push(`status:${s.id}:${s.status ?? ''}`));
 		await aya.start();
 		try {
 			await fn({ home, dir, aya, events, starts });
@@ -164,6 +173,41 @@ test('foreground agent still open when the parent goes idle is cancelled', async
 				line({ type: 'turn_ended', outcome: 'cancelled' }),
 			);
 			await waitFor(() => events.includes(`end:${S1}:cancelled`));
+		},
+	);
+});
+
+test('a turn end that lands on waiting cancels the foreground agent, not the background one', async () => {
+	await live(
+		busy,
+		async () => {},
+		async ({ dir, aya, events }) => {
+			await appendFile(
+				join(dir, 'chat_history.jsonl'),
+				line(spawn('c1', 'Look')) +
+					line(spawn('c2', 'Long job', true)) +
+					line(startedInBackground('c2', S2, 'Long job')),
+			);
+			await writeMeta(dir, meta(S1, 'Look', 'running'));
+			await writeMeta(dir, meta(S2, 'Long job', 'running'));
+			await waitFor(() => events.includes(`start:${S1}:`) && events.includes(`start:${S2}:`));
+			await appendFile(join(dir, 'updates.jsonl'), line(tasksRow(['t1', 'monitor', 'running'])));
+			await appendFile(
+				join(dir, 'events.jsonl'),
+				line({ type: 'turn_ended', outcome: 'completed' }),
+			);
+			await waitFor(() => events.includes(`end:${S1}:cancelled`));
+			assert.equal(aya.running()[0]?.status, 'waiting');
+			assert.equal(aya.running()[0]?.waitingFor, 'monitor');
+			await sleep(40);
+			assert.equal(
+				events.some((e) => e.startsWith(`end:${S2}:`)),
+				false,
+			);
+			assert.equal(
+				events.some((e) => e.startsWith('status:') && e.endsWith(':idle')),
+				false,
+			);
 		},
 	);
 });

@@ -151,6 +151,22 @@ test('detail shows waitingFor and wraps long titles', () => {
 	for (const line of lines) assert.ok(width(line) <= 30);
 });
 
+test('a background wait counts as waiting and its detail names the shell', () => {
+	const state = withSessions([
+		session('s', {
+			status: 'waiting',
+			waitingFor: 'shell',
+			activity: { openSubagents: 0, lastTurn: 'completed' },
+		}),
+		session('i', { status: 'idle' }),
+	]);
+	const lines = renderLines(state, opts);
+	assert.match(lines[0] ?? '', /2 live {2}1 waiting {2}0 running {2}1 idle/);
+	assert.match(lines[2] ?? '', /^> waiting/);
+	const detail = renderLines(applyKey(state, 'enter'), opts);
+	assert.ok(detail.some((l) => /Waiting for\s+shell/.test(l)));
+});
+
 test('help overlay lists keys', () => {
 	const text = renderLines(applyKey(sample(), { char: '?' }), opts).join('\n');
 	for (const k of ['Enter', 'Filter', 'Reverse', 'closed sessions', 'Quit'])

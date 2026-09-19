@@ -222,6 +222,34 @@ export function createOmpFixtureDriver(
 			}
 			await settle();
 		},
+		async startBackgroundWait(id) {
+			const e = entries.get(id);
+			if (!e) return;
+			const records: unknown[] = openTurns.has(id) ? [] : [user('watch it')];
+			openTurns.delete(id);
+			records.push(
+				assistant('toolUse', [toolCall(`bg-${id}`, 'bash')]),
+				marker(`bg-${id}`, 'bash'),
+				toolResult(`bg-${id}`, 'bash', {
+					async: { state: 'running', jobId: 'bg_1', type: 'bash' },
+				}),
+				assistant('stop', [{ type: 'text', text: 'waiting on it' }]),
+			);
+			await append(e.path, records);
+			await settle();
+		},
+		async endBackgroundWait(id) {
+			const e = entries.get(id);
+			if (!e) return;
+			await append(e.path, [
+				entry('custom_message', {
+					customType: 'async-result',
+					content: '<system-notice>\nBackground job bg_1 has completed.\n</system-notice>',
+					details: { jobs: [{ jobId: 'bg_1', type: 'bash', label: 'sleep 60', durationMs: 1 }] },
+				}),
+			]);
+			await settle();
+		},
 		async switchConversation(pid, newId) {
 			let old: Live | undefined;
 			for (const [id, e] of [...entries]) {

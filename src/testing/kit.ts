@@ -28,6 +28,7 @@ const ID = {
 	dedupe: '00000000-0000-4000-8000-000000000002',
 	act: '00000000-0000-4000-8000-000000000003',
 	sub: '00000000-0000-4000-8000-000000000004',
+	wait: '00000000-0000-4000-8000-000000000005',
 };
 
 export function defineConformanceTests(opts: ConformanceOptions): void {
@@ -63,6 +64,37 @@ export function defineConformanceTests(opts: ConformanceOptions): void {
 		await new Promise((r) => setTimeout(r, 30));
 		assert.ok(n >= 1);
 		await aya.stop();
+	});
+
+	// A harness that records no background work leaves the driver steps out, and stays idle.
+	const { startBackgroundWait, endBackgroundWait } = opts.driver;
+	test(`${opts.name}: background wait is waiting, then running when woken, then idle`, {
+		skip: !startBackgroundWait || !endBackgroundWait,
+	}, async () => {
+		const aya = AllYourAgents({ providers: [opts.provider], processes });
+		const log: string[] = [];
+		aya.on('session:status', (s) => {
+			if (s.id === ID.wait) log.push(`${s.status}:${s.waitingFor ?? ''}`);
+		});
+		await aya.start();
+		try {
+			await opts.driver.createLiveSession({ id: ID.wait, pid: 5, status: 'busy' });
+			await wait(3000, () => log.at(-1) === 'running:');
+			await startBackgroundWait?.call(opts.driver, ID.wait);
+			await wait(3000, () => log.at(-1) === 'waiting:shell');
+			assert.notEqual((await aya.get(ID.wait))?.activity.lastTurn, undefined);
+			await opts.driver.rewriteStatus(ID.wait, 'busy');
+			await wait(3000, () => log.at(-1) === 'running:');
+			await startBackgroundWait?.call(opts.driver, ID.wait);
+			await wait(3000, () => log.at(-1) === 'waiting:shell');
+			await endBackgroundWait?.call(opts.driver, ID.wait);
+			await wait(3000, () => log.at(-1) === 'idle:');
+			// Once it is running, the session is not idle again until the background work ends.
+			const seen = log.slice(log.indexOf('running:'));
+			assert.equal(seen.indexOf('idle:'), seen.length - 1, log.join(' '));
+		} finally {
+			await aya.stop();
+		}
 	});
 
 	test(`${opts.name}: activity tool and failed standing`, async () => {

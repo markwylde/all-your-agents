@@ -1,5 +1,6 @@
 import type { SessionStatus, TurnFact } from '../../types.ts';
 import { phaseStatus } from './status.ts';
+import { backgroundWait, type TaskMap } from './updates.ts';
 
 /** What `events.jsonl` has said so far about the current turn. */
 export type EventsState = {
@@ -14,10 +15,12 @@ export type EventsState = {
 	/** A turn or tool has been reported and not ended. */
 	activityOpen: boolean;
 	model?: string;
+	/** Background tasks by id, from `updates.jsonl`. They matter once no turn is open. */
+	tasks: TaskMap;
 };
 
 export function initialEventsState(): EventsState {
-	return { turnOpen: false, openTools: [], activityOpen: false };
+	return { turnOpen: false, openTools: [], activityOpen: false, tasks: new Map() };
 }
 
 export function eventTime(rec: Record<string, unknown>): number | undefined {
@@ -28,7 +31,10 @@ export function eventTime(rec: Record<string, unknown>): number | undefined {
 }
 
 export function deriveStatus(state: EventsState): { status?: SessionStatus; waitingFor?: string } {
-	if (!state.turnOpen) return { status: 'idle' };
+	if (!state.turnOpen) {
+		const waitingFor = backgroundWait(state.tasks);
+		return waitingFor ? { status: 'waiting', waitingFor } : { status: 'idle' };
+	}
 	const status = phaseStatus(state.phase);
 	if (status === 'waiting') return { status, waitingFor: state.waitingFor };
 	return status ? { status } : {};

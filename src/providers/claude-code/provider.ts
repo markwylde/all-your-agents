@@ -494,12 +494,12 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			updatedAt: parsed.updatedAt,
 			kind: parsed.kind ?? 'interactive',
 		});
-		const mapped = mapStatus(parsed.status);
+		const mapped = mapStatus(parsed.status, parsed.waitingFor);
 		if (mapped.status) {
 			ctx.emit('session:status', {
 				id: parsed.sessionId,
 				status: mapped.status,
-				waitingFor: parsed.status === 'waiting' ? parsed.waitingFor : undefined,
+				waitingFor: mapped.waitingFor,
 				updatedAt: parsed.statusUpdatedAt ?? parsed.updatedAt,
 			});
 		}
@@ -548,13 +548,13 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			}
 			if (!ctx || bound.released) return;
 		}
-		const mapped = mapStatus(parsed.status);
-		const prevMapped = mapStatus(prev.status);
-		if (mapped.status !== prevMapped.status || parsed.waitingFor !== prev.waitingFor) {
+		const mapped = mapStatus(parsed.status, parsed.waitingFor);
+		const prevMapped = mapStatus(prev.status, prev.waitingFor);
+		if (mapped.status !== prevMapped.status || mapped.waitingFor !== prevMapped.waitingFor) {
 			ctx.emit('session:status', {
 				id: parsed.sessionId,
 				status: mapped.status,
-				waitingFor: mapped.status === 'waiting' ? parsed.waitingFor : undefined,
+				waitingFor: mapped.waitingFor,
 				updatedAt: parsed.statusUpdatedAt ?? parsed.updatedAt,
 			});
 			if (isIdleWord(parsed.status)) {
