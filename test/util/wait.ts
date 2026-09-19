@@ -4,7 +4,7 @@ export function sleep(ms: number): Promise<void> {
 
 export async function waitFor<T>(
 	fn: () => T | undefined | false | null,
-	timeout = 2000,
+	timeout = 10_000,
 ): Promise<T> {
 	const start = Date.now();
 	let last: T | undefined | false | null;

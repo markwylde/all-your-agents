@@ -9,6 +9,7 @@ Watch every coding agent on this machine, and inspect the sessions they leave be
 | Claude Code | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ¹ |
 | Grok Build | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ² | 🟠 ³ | 🟢 | 🟢 | 🟢 | 🟠 ⁴ |
 | Codex CLI | 🟢 | 🟢 | 🔴 ⁵ | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
+| oh-my-pi | 🟢 | 🟢 ⁶ | 🟠 ⁷ | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ⁸ |
 
 🟢 full · 🟠 partial · 🔴 none. Subagents covers start, end, background and nested.
 
@@ -17,6 +18,9 @@ Watch every coding agent on this machine, and inspect the sessions they leave be
 3. A failed turn is reported as `failed`, but Grok records no error message for it, so `activity.error` is usually empty.
 4. `grok -p` registers as live only when `GROK_TRACK_HEADLESS` is set. Otherwise it appears in history only.
 5. Codex does not persist approval requests, so a session blocked on an approval reads as `running`. A launched Codex with no prompt yet has no rollout. A `/resume` after watch started appears on its first append. A VS Code thread unloaded without touching another file stays listed until the next event for that pid.
+6. omp writes no transcript until the first reply of a new session ends. That first turn is read from omp's prompt history, which needs SQLite: Node ≥ 22.13, or your own `sqlite` reader. Without it a new session reads `idle` until its transcript appears.
+7. A pending `ask` tool reads `waiting`. Permission approvals never reach disk, so a session blocked on one reads `running` (omp's default approval mode asks for none).
+8. omp names a run after the terminal on its stdin, in print mode too: `omp -p` typed in a terminal is live and reads `interactive`. Piped or detached, it has no terminal and appears in history only. Nothing on disk marks a run `headless`.
 
 ## Usage
 
@@ -129,6 +133,7 @@ AllYourAgents({
   providers: [...builtInProviders],
   fs,            // default: local filesystem
   processes,     // default: local ps/proc + kqueue/pidfd via optional koffi
+  sqlite,        // default: node:sqlite where the runtime has it; `false` for none
   debounce: { quietMs: 25, maxLatencyMs: 1000 },
 });
 ```
@@ -145,7 +150,7 @@ Status: `busy` → `running`, `waiting` → `waiting`, `idle`/`shell` → `idle`
 
 ## Grok Build
 
-Provider id `grok-build`, harness `Grok`. Home is `$GROK_HOME` if set, otherwise `~/.grok`, overridable via `grokBuild({ home })`. All three built-ins are in `builtInProviders`; pass `providers: [claudeCode()]` to watch Claude Code only.
+Provider id `grok-build`, harness `Grok`. Home is `$GROK_HOME` if set, otherwise `~/.grok`, overridable via `grokBuild({ home })`. All four built-ins are in `builtInProviders`; pass `providers: [claudeCode()]` to watch Claude Code only.
 
 Live index: `<home>/active_sessions.json`, an array of `{ session_id, pid, cwd, opened_at }`. One pid can hold several sessions. `grok -p` registers only when `GROK_TRACK_HEADLESS` is set; otherwise print-mode runs appear in history with `kind` `headless`. Sessions: `<home>/sessions/<encoded-cwd>/<id>/`. The cwd is percent-encoded like Rust `urlencoding` (everything but `A-Za-z0-9-._~`, so `/tmp/foo(bar)!` is `%2Ftmp%2Ffoo%28bar%29%21`); a cwd whose encoding exceeds 255 bytes is found by a one-level lookup for the session id.
 
@@ -159,6 +164,16 @@ Live sessions are rollout files a process currently has open: `<home>/sessions/Y
 
 A session does not exist until the first prompt writes a rollout. A resume after watch started appears on the first append. A quietly unloaded VS Code thread stays listed until the next event for that pid.
 
+## oh-my-pi
+
+Provider id `oh-my-pi`, harness `OhMyPi`. Home is `~/.omp` (or `~/$PI_CONFIG_DIR`), overridable via `ohMyPi({ home })`. `PI_CODING_AGENT_DIR` and, once `$XDG_DATA_HOME/omp` / `$XDG_STATE_HOME/omp` exist, the XDG locations are followed as omp follows them. Every named profile under `<home>/profiles/`, or under `$XDG_DATA_HOME/omp/profiles` / `$XDG_STATE_HOME/omp/profiles`, is observed too, and a deleted one closes its sessions. Upstream `pi` (`~/.pi`) is not.
+
+omp keeps a registry in two parts. Each process writes `run/daemons/<project-hash>/clients/<pid>-<uuid>.json` at launch and removes it on a clean exit. Each process on a terminal writes `agent/terminal-sessions/<tty>` naming the session file it is on, rewritten when you switch session (`/new`, `/resume`) and marked `fresh` while that file does not exist yet. The two are joined by the process's controlling terminal, read once per process with `processes.tty(pid)`. A breadcrumb older than the process on its terminal is not that process's, and binds nothing.
+
+Transcripts: `agent/sessions/<encoded-cwd>/<timestamp>_<id>.jsonl`. The directory name is lossy, so `cwd` comes from the header. A session kept elsewhere (`--session notes/work`, `--session-dir`) is found through `agent/custom-session-files/`, and is bound from its breadcrumb once its file exists; omp gives a file not named `*.jsonl` no subagents. Status comes from the last conversation record: a user message, a tool result, or an assistant `stopReason` of `toolUse` → `running`; `stop` / `length` → `idle`; `error` → `idle` with the turn `failed` and its `errorMessage`; `aborted` → `idle`, `interrupted`. A turn omp retries after a provider error starts again without a new prompt. Tools come from `toolCall` blocks and their `toolResult`; titles from `title_change`; `model` from `model_change` and the latest reply. Subagents run inside the parent process and are read from `<session>/<AgentId>.jsonl` (nested ones from `<session>/<Parent>/<Parent>.<Child>.jsonl`): type from `session_init.agent`, done when the child records a successful `yield`, `background` when the `task` result said it spawned them asynchronously. For a finished session, a child whose transcript never says how it ended takes its parent's report of it, else `cancelled`.
+
+Only the `history` table of `agent/history.db` is read, and only for a session with no transcript yet. `agent.db`, `models.db`, `logs/`, `blobs/` and the `.lock` sidecars are never opened.
+
 ## Testing kit
 
 ```ts
@@ -168,7 +183,7 @@ const { provider, driver } = createMemoryHarness();
 defineConformanceTests({ name: 'memory', provider, driver });
 ```
 
-`createGrokFixtureDriver(home)` and `createCodexFixtureDriver(home)` drive the same kit against those providers.
+`createGrokFixtureDriver(home)`, `createCodexFixtureDriver(home)` and `createOmpFixtureDriver(home)` drive the same kit against those providers.
 
 ## Non-goals
 

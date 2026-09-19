@@ -39,6 +39,8 @@
     "codex",
     "grok",
     "grok-build",
+    "oh-my-pi",
+    "omp",
     "sessions"
   ],
   "author": "Mark Wylde",

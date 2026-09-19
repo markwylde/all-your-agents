@@ -1,7 +1,7 @@
 import { basename, dirname } from 'node:path';
 import { systemClock } from './clock.ts';
 import { coalesce } from './coalesce.ts';
-import type { DebounceOptions, FileChange, Fs, FsStat, WatchHandle } from './types.ts';
+import type { FileChange, Fs, FsStat, WatchFileOptions, WatchHandle } from './types.ts';
 
 export type WatchFileHandle = {
 	close(): void;
@@ -15,12 +15,17 @@ const same = (a: FsStat | null, b: FsStat | null): boolean =>
  * that replaces the file by renaming a temporary sibling over it gives it a new inode;
  * inotify follows inodes, so a watch on the file goes silent after the first replace.
  * A missing parent is awaited under its nearest existing ancestor, one level at a time.
+ *
+ * With `heldOpen` the file is watched as well. On macOS a directory watch reports nothing
+ * for writes through a handle the writer keeps open, so a SQLite WAL would look silent.
+ * The parent watch still decides which file is at the path: the file watch is re-attached
+ * whenever the parent reports that name.
  */
 export function watchFile(
 	fs: Fs,
 	path: string,
 	onChange: (event: FileChange) => void,
-	opts: DebounceOptions = {},
+	opts: WatchFileOptions = {},
 ): WatchFileHandle {
 	const quietMs = opts.quietMs ?? 25;
 	const maxLatencyMs = opts.maxLatencyMs ?? 1000;
@@ -38,6 +43,31 @@ export function watchFile(
 		},
 		() => {},
 	);
+
+	let held: WatchHandle | undefined;
+	/** Follow the file now at the path. The old handle may be on a replaced inode. */
+	const holdFile = (): void => {
+		if (!opts.heldOpen || closed) return;
+		held?.close();
+		held = undefined;
+		let handle: WatchHandle;
+		try {
+			handle = fs.watch(path);
+		} catch {
+			return;
+		}
+		held = handle;
+		void (async () => {
+			try {
+				for await (const _event of handle) {
+					if (closed || held !== handle) return;
+					coalescer.notify(path, () => void service(false));
+				}
+			} catch {
+				// ended
+			}
+		})();
+	};
 
 	/** Notified: report whatever is there. Catching up: report only a difference. */
 	const service = async (onlyIfDifferent: boolean): Promise<void> => {
@@ -91,6 +121,8 @@ export function watchFile(
 				for await (const event of handle) {
 					if (closed) return;
 					if (event.filename && event.filename !== name) continue;
+					// A rename for our name means the file appeared, went, or was replaced.
+					if (event.type === 'rename') holdFile();
 					coalescer.notify(path, () => void service(false));
 				}
 			} catch {
@@ -124,6 +156,7 @@ export function watchFile(
 			found = true;
 			release(handle);
 			await arm();
+			holdFile();
 			// Anything created along with the directories was never notified.
 			await service(true);
 		};
@@ -147,6 +180,7 @@ export function watchFile(
 	const first = open(parent);
 	if (first) watchParent(first);
 	else void baseline.then(awaitParent).catch(() => {});
+	holdFile();
 
 	return {
 		close() {
@@ -155,6 +189,8 @@ export function watchFile(
 			coalescer.dispose();
 			current?.close();
 			current = undefined;
+			held?.close();
+			held = undefined;
 		},
 	};
 }

@@ -1,4 +1,4 @@
-export type Harness = 'ClaudeCode' | 'Codex' | 'Grok' | 'OpenCode' | (string & {});
+export type Harness = 'ClaudeCode' | 'Codex' | 'Grok' | 'OhMyPi' | 'OpenCode' | (string & {});
 
 export type SessionStatus = 'running' | 'waiting' | 'idle';
 

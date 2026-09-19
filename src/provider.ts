@@ -5,6 +5,8 @@ import type {
 	Fs,
 	Processes,
 	ProcessInfo,
+	Sqlite,
+	WatchFileOptions,
 } from './helpers/types.ts';
 import type {
 	Harness,
@@ -70,6 +72,7 @@ export type WatchDirFn = (
 export type WatchFileFn = (
 	path: string,
 	onChange: (event: FileChange) => void,
+	opts?: Pick<WatchFileOptions, 'heldOpen'>,
 ) => { close(): void };
 
 export type TailJsonlFn = (
@@ -94,6 +97,8 @@ export type WatchContext = {
 	home?: string;
 	fs: Fs;
 	processes: Processes;
+	/** Read-only SQLite, when the runtime or the consumer provides one. */
+	sqlite?: Sqlite;
 	debounce: { quietMs: number; maxLatencyMs: number };
 	watchDir: WatchDirFn;
 	watchFile: WatchFileFn;
@@ -104,6 +109,7 @@ export type WatchContext = {
 
 export type ListContext = {
 	fs: Fs;
+	sqlite?: Sqlite;
 	since?: number;
 	id?: string;
 	home?: string;
@@ -111,6 +117,7 @@ export type ListContext = {
 
 export type InspectContext = {
 	fs: Fs;
+	sqlite?: Sqlite;
 	follow?: boolean;
 	/** Aborts when the consumer stops. A provider that is following must then finish. */
 	signal?: AbortSignal;
@@ -132,5 +139,7 @@ export type InstanceOptions = {
 	providers?: Provider[];
 	fs?: Fs;
 	processes?: Processes;
+	/** A reader to use instead of the runtime's built-in SQLite, or `false` for none. */
+	sqlite?: Sqlite | false;
 	debounce?: DebounceOptions;
 };
