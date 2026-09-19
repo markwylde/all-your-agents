@@ -390,7 +390,11 @@ test('a sibling session in the same directory does not make us re-read ours', as
 		await writeTranscript(sibling, [slot(), header(B), user('other')]);
 		await appendTranscript(sibling, [assistant('stop')]);
 		await sleep(120);
-		assert.deepEqual(reads, []);
+		// A late breadcrumb notification may re-read the breadcrumb; no transcript is read.
+		assert.deepEqual(
+			reads.filter((p) => p.endsWith('.jsonl')),
+			[],
+		);
 		await aya.stop();
 		await aya.sessions();
 		assert.equal(
