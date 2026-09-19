@@ -50,7 +50,7 @@
 
 - [x] 8.1 Add `ohMyPi` to `builtInProviders` and re-export it from `src/index.ts`. Update the pack test, `test/types/readme.ts` and `test/types/usage.ts`. Verify an `npm pack` install imports every entry point and `--json` is `[]` when all four homes point at empty temps.
 - [x] 8.2 README: a compatibility-matrix row (Status 🟢 with a footnote that a new session's first turn needs Node ≥ 22.13; Waiting for 🟠, `ask` only; Print mode 🟠, history only; the rest 🟢) and an oh-my-pi section parallel to the others (home and profiles, registry join by tty, status from `stopReason`, first turn from `history.db`, files never opened). Keywords include `omp` and `oh-my-pi`. Verify README snippets still typecheck.
-- [x] 8.3 E2e helpers: run omp on a pty under a scratch `$HOME` whose config puts every model role on OpenRouter Sonnet (`OPENROUTER_API_KEY`, model env-overridable via `AYA_E2E_OMP_MODEL`), and install omp in the CI e2e job. Verify helpers compile and live tests skip without `AYA_LIVE=1`.
+- [x] 8.3 E2e helpers: run omp on a pty under a scratch `$HOME` whose config puts every model role on OpenRouter Haiku (`OPENROUTER_API_KEY`, model env-overridable via `AYA_E2E_OMP_MODEL`), and install omp in the CI e2e job. Verify helpers compile and live tests skip without `AYA_LIVE=1`.
 - [x] 8.4 Opt-in live smoke (`AYA_LIVE=1`): launch omp on a pty, wait for `session:create`, send a prompt, wait for `running` before the transcript exists (Node ≥ 22.13), then `idle`, quit, wait for `session:close`, and find it in `sessions({ since: startOfToday })`. Verify it passes locally and is skipped by default.
 - [x] 8.5 Opt-in live subagents: a prompt that spawns three task subagents; wait for three `subagent:start` and three `subagent:end` `completed`. Verify it passes locally and is skipped by default.
 - [x] 8.6 `npm test`, `npm run lint` and `npm run test:coverage` pass. Verify no `setInterval` was added outside `helpers/coalesce.ts`, and `openspec validate add-omp-provider --strict` passes.
@@ -63,4 +63,4 @@
 - [x] 9.4 `subagents()` from history: `background` from the parents' `task` results, and a child with no end of its own takes its parent's report.
 - [x] 9.5 Custom session files: relative breadcrumb paths resolved against the cwd, custom names identified by their header, listed from `custom-session-files/`, no artifact directory for a non-`.jsonl` name.
 - [x] 9.6 Profiles found under XDG too, and a deleted profile closes its sessions.
-- [x] 9.7 Live e2e on OpenRouter Sonnet in an isolated home, run by CI with omp installed through Bun.
+- [x] 9.7 Live e2e on OpenRouter Haiku in an isolated home, run by CI with omp installed through Bun.

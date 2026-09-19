@@ -233,7 +233,7 @@ export function waitUntil(
 }
 
 export function e2eGrokModel(): string {
-	return process.env.AYA_E2E_GROK_MODEL ?? 'x-ai/grok-4.6';
+	return process.env.AYA_E2E_GROK_MODEL ?? 'anthropic/claude-haiku-4.5';
 }
 
 export function e2eGrokEffort(): string {
@@ -304,7 +304,7 @@ export const THREE_GROK_AGENT_PROMPT =
 	'This is an automated test. Do not plan or think at length. You MUST call spawn_subagent exactly 3 times in this turn, in parallel, each with subagent_type=general-purpose and no background. Prompts: (1) Reply with only the word ALPHA. (2) Reply with only the word BETA. (3) Reply with only the word GAMMA. Wait for all three results, then output DONE.';
 
 export function e2eCodexModel(): string {
-	return process.env.AYA_E2E_CODEX_MODEL ?? 'x-ai/grok-4.6';
+	return process.env.AYA_E2E_CODEX_MODEL ?? 'anthropic/claude-haiku-4.5';
 }
 
 export function e2eCodexEffort(): string {
