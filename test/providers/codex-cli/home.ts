@@ -82,6 +82,14 @@ export function collabWait(
 	);
 }
 
+/** Codex's `thread-writer-locks/<thread-id>.lock`: empty, created when a thread opens. */
+export async function writeLock(home: string, threadId: string): Promise<string> {
+	const path = join(home, 'thread-writer-locks', `${threadId}.lock`);
+	await mkdir(dirname(path), { recursive: true });
+	await writeFile(path, '');
+	return path;
+}
+
 export async function writeRollout(path: string, records: unknown[]): Promise<void> {
 	await mkdir(dirname(path), { recursive: true });
 	await writeFile(path, records.map((r) => `${JSON.stringify(r)}\n`).join(''));

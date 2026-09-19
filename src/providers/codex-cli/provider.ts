@@ -25,9 +25,12 @@ import {
 	codexHome,
 	isRolloutName,
 	type PathOptions,
+	parseLockName,
 	parseRolloutName,
 	sessionIndexPath,
 	sessionsDir,
+	threadLockPath,
+	threadLocksDir,
 } from './paths.ts';
 import { acceptMeta, type SessionMeta } from './session-meta.ts';
 import { completionOf, spawnIds } from './subagents.ts';
@@ -58,9 +61,6 @@ type Bound = {
 const HARNESS = 'Codex';
 const PROVIDER = 'codex-cli';
 
-/** Recent rollouts that get their own file watch, so a resume is seen while it is live. */
-const RESUME_WATCH_LIMIT = 64;
-
 function isDatePart(name: string, depth: number): boolean {
 	return depth === 0 ? /^\d{4}$/.test(name) : /^\d{2}$/.test(name);
 }
@@ -76,8 +76,8 @@ export function codexCli(options: PathOptions = {}): Provider {
 	const notRoots = new Set<string>();
 	const knownThreads = new Set<string>();
 	const dirWatches = new Map<string, { close(): void; ready?: Promise<void> }>();
-	/** Most recently used last. See `watchForResume`. */
-	const resumeWatches = new Map<string, { close(): void }>();
+	/** Newest plain rollout per thread id, so a thread lock can be resolved without a scan. */
+	const rolloutPaths = new Map<string, string>();
 	const knownPaths = new Map<string, string>();
 	let catchUp = false;
 
@@ -159,56 +159,6 @@ export function codexCli(options: PathOptions = {}): Provider {
 		}
 		teardown(bound);
 		ctx?.emit('session:close', { id: bound.id });
-		const path = bound.path;
-		void ctx?.fs.stat(path).then((st) => {
-			if (st) watchForResume(path);
-		});
-	};
-
-	/**
-	 * A resumed thread appends through a handle Codex keeps open. On macOS a directory
-	 * watch (FSEvents) reports nothing for that until the handle closes, so the day
-	 * directory never tells us about a resume while it is live. A watch on the file
-	 * itself (kqueue) fires on every write, so keep one on each recent rollout, bounded.
-	 */
-	const watchForResume = (path: string): void => {
-		if (!ctx || closed) return;
-		const existing = resumeWatches.get(path);
-		if (existing) {
-			resumeWatches.delete(path);
-			resumeWatches.set(path, existing);
-			return;
-		}
-		let handle: ReturnType<WatchContext['fs']['watch']>;
-		try {
-			handle = ctx.fs.watch(path);
-		} catch {
-			return;
-		}
-		resumeWatches.set(path, handle);
-		const threadId = parseRolloutName(basename(path))?.threadId;
-		void (async () => {
-			try {
-				for await (const event of handle) {
-					if (closed) break;
-					if (event.type === 'rename' && !(await ctx?.fs.stat(path).catch(() => null))) {
-						handle.close();
-						break;
-					}
-					if (!primed) continue;
-					if (threadId && bounds.has(threadId)) continue;
-					void inOrder(() => onRollout(path));
-				}
-			} catch {
-				// ended
-			}
-			if (resumeWatches.get(path) === handle) resumeWatches.delete(path);
-		})();
-		while (resumeWatches.size > RESUME_WATCH_LIMIT) {
-			const [oldest, h] = resumeWatches.entries().next().value as [string, { close(): void }];
-			h.close();
-			resumeWatches.delete(oldest);
-		}
 	};
 
 	const consume = (bound: Bound, tail: Tail, handle: (rec: unknown) => void): void => {
@@ -640,17 +590,49 @@ export function codexCli(options: PathOptions = {}): Provider {
 				return;
 			}
 			if (!isRolloutName(event.name)) return;
+			const parsed = parseRolloutName(event.name);
 			if (event.type === 'delete') {
-				resumeWatches.get(event.path)?.close();
-				resumeWatches.delete(event.path);
+				if (parsed && rolloutPaths.get(parsed.threadId) === event.path) {
+					rolloutPaths.delete(parsed.threadId);
+				}
 				void inOrder(() => onDelete(event.path));
 				return;
 			}
+			if (parsed && !parsed.compressed) rolloutPaths.set(parsed.threadId, event.path);
 			if (!primed) return;
-			watchForResume(event.path);
 			void inOrder(() => onRollout(event.path));
 		});
 		dirWatches.set(path, handle);
+	};
+
+	/**
+	 * Codex creates `thread-writer-locks/<thread-id>.lock` when a process opens a thread for
+	 * writing (a new thread, `codex resume`, `codex exec resume`) and holds it open while the
+	 * thread is live (ADR 0002). Its creation says which thread; its holder is the pid. A new
+	 * thread has no rollout until its first prompt, and the day directory reports that one.
+	 */
+	const onLock = async (threadId: string): Promise<void> => {
+		if (!ctx || closed || bounds.has(threadId) || notRoots.has(threadId)) return;
+		const path = rolloutPaths.get(threadId);
+		if (!path) return;
+		const pids = await holdersOf(threadLockPath(homeOf(), threadId));
+		if (!ctx || closed || bounds.has(threadId)) return;
+		const pid = pids.find((p) => !stale.has(`${p}:${threadId}`));
+		if (pid == null) return;
+		const meta = await readMetaAt(ctx.fs, path);
+		if (!meta?.root) return;
+		await bind(path, pid, meta, 'open');
+	};
+
+	const watchLocks = (): void => {
+		if (!ctx) return;
+		const dir = threadLocksDir(homeOf());
+		const handle = ctx.watchDir(dir, (event) => {
+			if (closed || !primed || event.type === 'delete') return;
+			const threadId = parseLockName(event.name);
+			if (threadId) void inOrder(() => onLock(threadId));
+		});
+		dirWatches.set(dir, handle);
 	};
 
 	const bindHeld = async (): Promise<void> => {
@@ -715,6 +697,7 @@ export function codexCli(options: PathOptions = {}): Provider {
 			closed = false;
 			primed = false;
 			watchLevel(sessionsDir(homeOf()), 0);
+			watchLocks();
 			for (;;) {
 				const n = dirWatches.size;
 				await Promise.all([...dirWatches.values()].map((h) => h.ready ?? Promise.resolve()));
@@ -722,12 +705,11 @@ export function codexCli(options: PathOptions = {}): Provider {
 			}
 			try {
 				const files = await listRolloutFiles(watchCtx.fs, homeOf());
-				for (const file of files) knownThreads.add(file.threadId);
-				const recent = files
-					.filter((file) => !file.compressed)
-					.sort((a, b) => (a.mtimeMs ?? 0) - (b.mtimeMs ?? 0))
-					.slice(-RESUME_WATCH_LIMIT);
-				for (const file of recent) watchForResume(file.path);
+				files.sort((a, b) => (a.mtimeMs ?? 0) - (b.mtimeMs ?? 0));
+				for (const file of files) {
+					knownThreads.add(file.threadId);
+					if (!file.compressed) rolloutPaths.set(file.threadId, file.path);
+				}
 			} catch {
 				// history may be empty
 			}
@@ -755,8 +737,7 @@ export function codexCli(options: PathOptions = {}): Provider {
 				index.close();
 				for (const h of dirWatches.values()) h.close();
 				dirWatches.clear();
-				for (const h of resumeWatches.values()) h.close();
-				resumeWatches.clear();
+				rolloutPaths.clear();
 				for (const bound of [...bounds.values()]) teardown(bound);
 				for (const entry of pidWatches.values()) entry.handle?.stop();
 				pidWatches.clear();

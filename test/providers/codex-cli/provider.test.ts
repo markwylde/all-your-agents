@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFile, mkdir, mkdtemp, open, rename, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -16,6 +16,7 @@ import {
 	responseItem,
 	rolloutPath,
 	sessionMeta,
+	writeLock,
 	writeRollout,
 } from './home.js';
 
@@ -205,40 +206,29 @@ test('append after start opens a resume; user prompt titles', async () => {
 	});
 });
 
-test('resume after start is seen through a held append handle', async () => {
-	// Codex keeps its rollout open and appends through that handle. On macOS a
-	// directory watch reports nothing for such writes until the handle closes.
+test('resume after start is seen from its thread lock, before any append', async () => {
 	await withHome(async (home) => {
 		const start = Date.now() - 1000;
 		const procs = fakeCodexProcesses(start);
 		procs.set(6, true, start);
 		const path = rolloutPath(home, A);
 		await writeRollout(path, [sessionMeta(A, {}, new Date(start - 86_400_000).toISOString())]);
-		// Let FSEvents flush the file's creation, so only the held write is left to see.
-		await sleep(1500);
 		const aya = AllYourAgents({
 			providers: [codexCli({ home })],
 			processes: procs,
 			debounce: { quietMs: 10 },
 		});
 		const events: string[] = [];
-		aya.on('session:open', (s) => events.push(`open:${s.id}`));
+		aya.on('session:open', (s) => events.push(`open:${s.id}:${s.pid}`));
 		await aya.start();
-		// Let start-up watch churn settle, so its catch-up rescan cannot see the write.
-		await sleep(500);
-		const handle = await open(path, 'a');
-		try {
-			procs.hold(6, path);
-			await handle.write(`${JSON.stringify(eventMsg('thread_settings_applied'))}\n`);
-			await waitFor(() => events.includes(`open:${A}`));
-		} finally {
-			await handle.close();
-			await aya.stop();
-		}
+		const lock = await writeLock(home, A);
+		procs.hold(6, lock);
+		await waitFor(() => events.includes(`open:${A}:6`));
+		await aya.stop();
 	});
 });
 
-test('quit then resume again is seen through a held append handle', async () => {
+test('quit then resume again is seen from a recreated thread lock', async () => {
 	await withHome(async (home) => {
 		const start = Date.now() - 1000;
 		const procs = fakeCodexProcesses(start);
@@ -246,7 +236,6 @@ test('quit then resume again is seen through a held append handle', async () => 
 		const path = rolloutPath(home, A);
 		await writeRollout(path, [sessionMeta(A, {}, new Date(start - 86_400_000).toISOString())]);
 		procs.hold(7, path);
-		await sleep(1500);
 		const aya = AllYourAgents({
 			providers: [codexCli({ home })],
 			processes: procs,
@@ -257,21 +246,35 @@ test('quit then resume again is seen through a held append handle', async () => 
 		aya.on('session:close', () => events.push('close'));
 		await aya.start();
 		await waitFor(() => events.includes('open:7'));
+		// A TUI leaves its unheld lock behind; the next Codex deletes and recreates it.
+		const lock = await writeLock(home, A);
 		procs.drop(7, path);
 		procs.set(7, false);
 		procs.fire(7);
 		await waitFor(() => events.includes('close'));
-		await sleep(500);
 		procs.set(8, true, Date.now());
-		const handle = await open(path, 'a');
-		try {
-			procs.hold(8, path);
-			await handle.write(`${JSON.stringify(eventMsg('thread_settings_applied'))}\n`);
-			await waitFor(() => events.includes('open:8'));
-		} finally {
-			await handle.close();
-			await aya.stop();
-		}
+		await rm(lock);
+		await writeLock(home, A);
+		procs.hold(8, lock);
+		await waitFor(() => events.includes('open:8'));
+		await aya.stop();
+	});
+});
+
+test('a lock for a thread with no rollout yet binds nothing', async () => {
+	await withHome(async (home) => {
+		const procs = fakeCodexProcesses();
+		procs.set(9, true);
+		const aya = AllYourAgents({
+			providers: [codexCli({ home })],
+			processes: procs,
+			debounce: { quietMs: 10 },
+		});
+		await aya.start();
+		procs.hold(9, await writeLock(home, A));
+		await sleep(100);
+		assert.equal(aya.running().length, 0);
+		await aya.stop();
 	});
 });
 

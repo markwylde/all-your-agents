@@ -21,6 +21,21 @@ export function sessionsDir(home: string): string {
 	return join(home, 'sessions');
 }
 
+export function threadLocksDir(home: string): string {
+	return join(home, 'thread-writer-locks');
+}
+
+export function threadLockPath(home: string, threadId: string): string {
+	return join(threadLocksDir(home), `${threadId}.lock`);
+}
+
+/** Thread id from a `thread-writer-locks` entry, or undefined for anything else. */
+export function parseLockName(name: string): string | undefined {
+	if (!name.endsWith('.lock')) return undefined;
+	const id = name.slice(0, -'.lock'.length);
+	return UUID.test(id) ? id : undefined;
+}
+
 export function sessionIndexPath(home: string): string {
 	return join(home, 'session_index.jsonl');
 }
