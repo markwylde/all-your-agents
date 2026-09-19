@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +7,7 @@ import { createLocalFs } from '../../../src/helpers/fs.js';
 import { createLocalSqlite } from '../../../src/helpers/sqlite.js';
 import { AllYourAgents } from '../../../src/index.js';
 import { ohMyPi } from '../../../src/providers/oh-my-pi/index.js';
+import { sqliteWriter } from '../../util/sqlite-writer.js';
 import { sleep, waitFor } from '../../util/wait.js';
 import {
 	A,
@@ -113,7 +113,7 @@ test('history rebuilt with lower ids: the cursor resets, nothing old is replayed
 	await withHome(async (home) => {
 		await mkdir(join(home, 'agent'), { recursive: true });
 		const db = join(home, 'agent', 'history.db');
-		const child = spawn('sqlite3', [db], { stdio: ['pipe', 'ignore', 'inherit'] });
+		const child = sqliteWriter(db);
 		const run = (sql: string) => child.stdin.write(`${sql}\n`);
 		const submit = (id: string, prompt: string) =>
 			run(

@@ -213,6 +213,50 @@ test('catch-up: finished children are reported ended without a start; a running 
 	});
 });
 
+test('a child spawned while the session is still binding starts; one there before is seeded', async () => {
+	await withHome(async (home) => {
+		const procs = fakeOmpProcesses();
+		const path = sessionPath(home, A);
+		const dir = artifacts(path);
+		await writeTranscript(path, [slot(), header(A), user('go')]);
+		await writeTranscript(join(dir, 'Before.jsonl'), child(path, 1));
+		await sleep(5);
+		// Holds the bind in its first read of the transcript, as a slow disk would.
+		const inner = createLocalFs();
+		let release: (() => void) | undefined;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let reading: (() => void) | undefined;
+		const held = new Promise<void>((resolve) => {
+			reading = resolve;
+		});
+		const fs: Fs = {
+			...inner,
+			readRange: async (p, start, end) => {
+				if (p === path) {
+					reading?.();
+					await gate;
+				}
+				return inner.readRange(p, start, end);
+			},
+		};
+		const { aya, events } = observe(home, procs, fs);
+		await aya.start();
+		await launch(home, procs, { id: A, pid: 330, terminal: 'ttys330', records: [user('go')] });
+		await held;
+		await sleep(5);
+		await writeTranscript(join(dir, 'During.jsonl'), child(path, 2));
+		release?.();
+		await waitFor(() => events.includes('start:During:sonic::fg'));
+		assert.equal(
+			events.some((e) => e.startsWith('start:Before')),
+			false,
+		);
+		await aya.stop();
+	});
+});
+
 test('from history: background from the task result, and a parent report ends a child', async () => {
 	await withHome(async (home) => {
 		const path = sessionPath(home, A);

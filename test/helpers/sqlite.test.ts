@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,11 +6,12 @@ import { test } from 'node:test';
 import { createLocalProcesses } from '../../src/helpers/processes.js';
 import { createLocalSqlite } from '../../src/helpers/sqlite.js';
 import type { SqliteRow } from '../../src/helpers/types.js';
+import { sqliteWriter } from '../util/sqlite-writer.js';
 import { sleep } from '../util/wait.js';
 
 /** A long-lived writer, like a harness holding its database open in WAL mode. */
 function writer(db: string) {
-	const child = spawn('sqlite3', [db], { stdio: ['pipe', 'ignore', 'inherit'] });
+	const child = sqliteWriter(db);
 	const run = (sql: string) => child.stdin.write(`${sql}\n`);
 	run('pragma journal_mode=wal; create table t(id integer primary key, v text);');
 	return { child, run };

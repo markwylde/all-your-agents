@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -8,6 +7,7 @@ import { createLocalSqlite } from '../../../src/helpers/sqlite.js';
 import type { Fs, Sqlite } from '../../../src/helpers/types.js';
 import { type AgentsError, AllYourAgents, type Provider } from '../../../src/index.js';
 import { ohMyPi } from '../../../src/providers/oh-my-pi/index.js';
+import { sqliteWriter } from '../../util/sqlite-writer.js';
 import { sleep, waitFor } from '../../util/wait.js';
 import {
 	A,
@@ -51,7 +51,7 @@ async function historyWriter(
 ) {
 	await mkdir(join(home, 'agent'), { recursive: true });
 	const db = join(home, 'agent', 'history.db');
-	const child = spawn('sqlite3', [db], { stdio: ['pipe', 'ignore', 'inherit'] });
+	const child = sqliteWriter(db);
 	const run = (sql: string) => child.stdin.write(`${sql}\n`);
 	run(
 		`pragma journal_mode=wal; create table history(id INTEGER PRIMARY KEY AUTOINCREMENT, ${schema});`,

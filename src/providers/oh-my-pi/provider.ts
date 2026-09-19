@@ -89,6 +89,8 @@ type Bound = {
 	promptTitled: boolean;
 	/** Children found while binding are seeded, not announced as starting now. */
 	seeding: boolean;
+	/** When binding began: a child whose header starts later is new, even while seeding. */
+	boundAt: number;
 	/** Agents a `task` result said it spawned asynchronously: omp's own word for background. */
 	asyncAgents: Set<string>;
 	/** What parents have said became of their agents, kept for a child we have yet to read. */
@@ -295,7 +297,9 @@ export function ohMyPi(options: PathOptions = {}): Provider {
 		for (const rec of records) apply(rec, false);
 		const told = bound.reported.get(id);
 		if (told && agent.facts.status === 'running') agent.facts.status = told;
-		if (!bound.seeding) reportLive(bound, agent);
+		// A child spawned while we were still binding has not been seen by anyone yet.
+		const isNew = head?.startedAt != null && head.startedAt > bound.boundAt;
+		if (!bound.seeding || isNew) reportLive(bound, agent);
 		if (agent.facts.status !== 'running') {
 			for (const close of agent.closes.splice(0)) close();
 			return;
@@ -531,6 +535,7 @@ export function ohMyPi(options: PathOptions = {}): Provider {
 		client: Client,
 	): Promise<void> => {
 		if (!ctx || closed || bounds.has(crumb.sessionId)) return;
+		const boundAt = Date.now();
 		const st = await ctx.fs.stat(crumb.sessionPath).catch(() => null);
 		let cwd = crumb.cwd;
 		let startedAt = crumb.startedAt;
@@ -553,6 +558,7 @@ export function ohMyPi(options: PathOptions = {}): Provider {
 			processStart: client.startTime,
 			promptTitled: false,
 			seeding: true,
+			boundAt,
 			asyncAgents: new Set(),
 			reported: new Map(),
 			pending: new Set(),
@@ -593,6 +599,7 @@ export function ohMyPi(options: PathOptions = {}): Provider {
 		if (!ctx || bound.released) return;
 		reportCwd(bound, head?.cwd ?? crumb.cwd);
 		bound.seeding = true;
+		bound.boundAt = Date.now();
 		await attach(bound, 'seed');
 		if (bound.released) return;
 		watchSessionDir(bound);

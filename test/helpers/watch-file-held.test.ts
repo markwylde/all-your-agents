@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdtemp, open, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createLocalFs } from '../../src/helpers/fs.js';
 import { watchFile } from '../../src/helpers/watch-file.js';
+import { sqliteWriter } from '../util/sqlite-writer.js';
 import { sleep, waitFor } from '../util/wait.js';
 
 test('heldOpen reports commits to a WAL that another process keeps open', async () => {
 	const dir = await mkdtemp(join(tmpdir(), 'aya-file-held-'));
 	const db = join(dir, 'h.db');
-	const child = spawn('sqlite3', [db], { stdio: ['pipe', 'ignore', 'inherit'] });
+	const child = sqliteWriter(db);
 	child.stdin.write('pragma journal_mode=wal; create table t(a); insert into t values(0);\n');
 	const fs = createLocalFs();
 	try {
