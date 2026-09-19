@@ -28,3 +28,29 @@ test('settings-only stays idle; open tool stays running without waitingFor', () 
 	assert.equal(deriveStatus(state).status, 'running');
 	assert.equal('waitingFor' in deriveStatus(state), false);
 });
+
+// Codex delivers nothing to an ended turn and persists no in-progress exec state, so a
+// unified-exec process that outlives its turn is not a background wait.
+test('a unified exec session left running when the turn completes is idle, never waiting', () => {
+	const state = initialEventsState();
+	reduceRecord(state, eventMsg('task_started'));
+	reduceRecord(
+		state,
+		responseItem({
+			type: 'function_call',
+			call_id: 'c1',
+			name: 'exec_command',
+			arguments: JSON.stringify({ cmd: 'npm run dev', yield_time_ms: 1000 }),
+		}),
+	);
+	reduceRecord(
+		state,
+		responseItem({
+			type: 'function_call_output',
+			call_id: 'c1',
+			output: 'Process running with session ID 7',
+		}),
+	);
+	reduceRecord(state, eventMsg('task_complete'));
+	assert.deepEqual(deriveStatus(state), { status: 'idle' });
+});

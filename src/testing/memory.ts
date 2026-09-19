@@ -102,6 +102,22 @@ export function createMemoryHarness(): {
 			if (row) row.status = mapped;
 			ctx?.emit('session:status', { id, status: mapped });
 		},
+		async startBackgroundWait(id) {
+			const row = live.get(id);
+			if (row) row.status = 'waiting';
+			ctx?.emit('turn', {
+				sessionId: id,
+				type: 'turn-ended',
+				outcome: 'completed',
+				endedAt: Date.now(),
+			});
+			ctx?.emit('session:status', { id, status: 'waiting', waitingFor: 'shell' });
+		},
+		async endBackgroundWait(id) {
+			const row = live.get(id);
+			if (row) row.status = 'idle';
+			ctx?.emit('session:status', { id, status: 'idle' });
+		},
 		async switchConversation(pid, newId) {
 			const old = byPid.get(pid);
 			if (old) {

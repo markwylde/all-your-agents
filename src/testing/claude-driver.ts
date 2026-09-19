@@ -3,7 +3,15 @@ import { join } from 'node:path';
 import { encodeProjectDir } from '../providers/claude-code/paths.ts';
 import type { FixtureDriver } from './driver.ts';
 
-export function createClaudeFixtureDriver(home: string, start = Date.now() - 200): FixtureDriver {
+/** Each step waits `settleMs`, when given, so the provider has observed it before the next. */
+export function createClaudeFixtureDriver(
+	home: string,
+	start = Date.now() - 200,
+	opts: { settleMs?: number } = {},
+): FixtureDriver {
+	const settle = async (): Promise<void> => {
+		if (opts.settleMs) await new Promise<void>((resolve) => setTimeout(resolve, opts.settleMs));
+	};
 	const pids = new Map<string, number>();
 	const cwds = new Map<string, string>();
 	let nextPid = 1000;
@@ -25,6 +33,7 @@ export function createClaudeFixtureDriver(home: string, start = Date.now() - 200
 				...over,
 			}),
 		);
+		await settle();
 	};
 
 	const appendJournal = async (id: string, records: unknown[]): Promise<void> => {
@@ -37,6 +46,7 @@ export function createClaudeFixtureDriver(home: string, start = Date.now() - 200
 		await appendFile(path, lines).catch(async () => {
 			await writeFile(path, lines);
 		});
+		await settle();
 	};
 
 	return {
@@ -51,6 +61,12 @@ export function createClaudeFixtureDriver(home: string, start = Date.now() - 200
 		},
 		async rewriteStatus(id, status) {
 			await writeSession(id, { status });
+		},
+		async startBackgroundWait(id) {
+			await writeSession(id, { status: 'shell' });
+		},
+		async endBackgroundWait(id) {
+			await writeSession(id, { status: 'idle' });
 		},
 		async switchConversation(pid, newId) {
 			pids.set(newId, pid);

@@ -67,6 +67,25 @@ export function createGrokFixtureDriver(
 		await settle();
 	};
 
+	/** Grok's ACP log: background tasks are `_x.ai/session/update` rows, snapshots included. */
+	const updates = async (id: string, rows: Record<string, unknown>[]): Promise<void> => {
+		await append(
+			join(dirOf(id), 'updates.jsonl'),
+			rows.map((update) => ({
+				timestamp: Math.floor(Date.now() / 1000),
+				method: '_x.ai/session/update',
+				params: { sessionId: id, update },
+			})),
+		);
+		await settle();
+	};
+	const backgroundTask = (id: string, status: string) => ({
+		task_id: `task-${id}`,
+		command: 'sleep 60',
+		kind: 'bash',
+		status,
+	});
+
 	const statusRecords = (id: string, status: string): unknown[] => {
 		const out: unknown[] = [];
 		if (status === 'idle') {
@@ -191,6 +210,19 @@ export function createGrokFixtureDriver(
 		async rewriteStatus(id, status) {
 			const records = statusRecords(id, status);
 			if (records.length) await events(id, records);
+		},
+		async startBackgroundWait(id) {
+			await updates(id, [
+				{ sessionUpdate: 'task_backgrounded', task_id: `task-${id}`, command: 'sleep 60' },
+				{ sessionUpdate: 'background_tasks', tasks: [backgroundTask(id, 'running')] },
+			]);
+			await events(id, statusRecords(id, 'idle'));
+		},
+		async endBackgroundWait(id) {
+			await updates(id, [
+				{ sessionUpdate: 'task_completed', task_snapshot: { task_id: `task-${id}`, exit_code: 0 } },
+				{ sessionUpdate: 'background_tasks', tasks: [backgroundTask(id, 'completed')] },
+			]);
 		},
 		async switchConversation(pid, newId) {
 			let cwd = '/tmp/app';

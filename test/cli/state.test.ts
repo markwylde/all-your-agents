@@ -39,6 +39,22 @@ test('status change updates counts', () => {
 	assert.deepEqual(liveCounts(state), { live: 1, running: 0, waiting: 1, idle: 0 });
 });
 
+test('a turn that ends on a background wait moves from running to waiting, not idle', () => {
+	let state = withSessions([session('a', { status: 'running' })]);
+	state = applyEvent(state, {
+		type: 'session',
+		name: 'status',
+		session: session('a', { status: 'waiting', waitingFor: 'shell' }),
+	});
+	assert.deepEqual(liveCounts(state), { live: 1, running: 0, waiting: 1, idle: 0 });
+	state = applyEvent(state, {
+		type: 'session',
+		name: 'status',
+		session: session('a', { status: 'idle' }),
+	});
+	assert.deepEqual(liveCounts(state), { live: 1, running: 0, waiting: 0, idle: 1 });
+});
+
 test('close removes the row but keeps it for the closed view', () => {
 	let state = withSessions([session('a'), session('b')]);
 	state = applyEvent(state, { type: 'session', name: 'close', session: session('a') });
