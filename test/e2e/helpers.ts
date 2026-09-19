@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -65,12 +65,23 @@ export const stubProcesses = {
 	},
 };
 
+/**
+ * The runner's env without Claude and Anthropic variables. Run from inside a Claude Code
+ * session, children would otherwise inherit its session markers (and treat themselves as
+ * subagents that save no transcript), its effort, and its credentials.
+ */
+function ambientEnv(): NodeJS.ProcessEnv {
+	return Object.fromEntries(
+		Object.entries(process.env).filter(([name]) => !/^(CLAUDE|ANTHROPIC)/.test(name)),
+	);
+}
+
 export function claudeEnv(home: string): NodeJS.ProcessEnv {
 	const key = process.env.OPENROUTER_API_KEY;
 	if (!key) throw new Error('OPENROUTER_API_KEY is missing');
 	const model = e2eModel();
 	return {
-		...process.env,
+		...ambientEnv(),
 		CLAUDE_CONFIG_DIR: home,
 		OPENROUTER_API_KEY: key,
 		ANTHROPIC_BASE_URL: 'https://openrouter.ai/api',
@@ -103,25 +114,27 @@ export async function isolatedClaudeHome(): Promise<{ home: string; cwd: string 
 			theme: 'dark',
 		}),
 	);
-	trustProject(cwd);
+	trustProject(home, cwd);
 	return { home, cwd };
 }
 
-export function trustProject(cwd: string): void {
-	const configPath = join(homedir(), '.claude.json');
-	if (!existsSync(configPath)) return;
-	try {
-		const data = JSON.parse(readFileSync(configPath, 'utf8')) as {
-			projects?: Record<string, { hasTrustDialogAccepted?: boolean }>;
-		};
-		const resolved = realpathSync(cwd);
-		data.projects ??= {};
-		data.projects[cwd] = { ...data.projects[cwd], hasTrustDialogAccepted: true };
-		data.projects[resolved] = { ...data.projects[resolved], hasTrustDialogAccepted: true };
-		writeFileSync(configPath, `${JSON.stringify(data, null, 2)}\n`);
-	} catch {
-		// picker test will still try the dialog
+/**
+ * Marks onboarding done and `cwd` trusted in the isolated home's `.claude.json`, which is
+ * where Claude reads them under `CLAUDE_CONFIG_DIR`, so interactive runs open straight to
+ * the prompt and the runner's own `~/.claude.json` is never touched.
+ */
+export function trustProject(home: string, cwd: string): void {
+	const configPath = join(home, '.claude.json');
+	const data = (existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {}) as {
+		hasCompletedOnboarding?: boolean;
+		projects?: Record<string, object>;
+	};
+	data.hasCompletedOnboarding = true;
+	data.projects ??= {};
+	for (const path of new Set([cwd, realpathSync(cwd)])) {
+		data.projects[path] = { ...data.projects[path], hasTrustDialogAccepted: true };
 	}
+	writeFileSync(configPath, `${JSON.stringify(data, null, 2)}\n`);
 }
 
 export function startBackgroundClaude(
