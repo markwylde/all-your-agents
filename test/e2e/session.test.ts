@@ -12,7 +12,7 @@ import {
 	waitUntil,
 } from './helpers.js';
 
-test('haiku --bg: live create/open, status, close', async (t) => {
+test('claude --bg: live create/open, status, close', async (t) => {
 	if (!liveEnabled()) {
 		t.skip('set AYA_LIVE=1 and OPENROUTER_API_KEY');
 		return;

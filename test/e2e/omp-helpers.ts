@@ -14,7 +14,7 @@ export function ompLiveEnabled(): boolean {
 }
 
 export function e2eOmpModel(): string {
-	return process.env.AYA_E2E_OMP_MODEL ?? 'openrouter/anthropic/claude-sonnet-5';
+	return process.env.AYA_E2E_OMP_MODEL ?? 'openrouter/z-ai/glm-5.3-flashx';
 }
 
 const OMP_ROLES = ['default', 'smol', 'slow', 'plan', 'commit', 'tiny', 'task', 'advisor'];

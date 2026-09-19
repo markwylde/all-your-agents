@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Drive `claude --resume` over a PTY: dismiss onboarding, pick a session, type a prompt."""
+"""Drive `claude --resume` over a PTY: wait for a session to be listed, then pick it.
+
+Onboarding and folder trust must already be done in `$CLAUDE_CONFIG_DIR`, so the first
+screen is the picker. Rows show a generated title, so the session counts as listed once
+the selected row of the `--bg` seed (`❯ <title> <age> · bg · ...`) is drawn. Prints
+LISTED then, PICKED once Enter is pressed on it, and SCREEN with what it saw on the way
+out. Keeps `claude` running until SIGTERM.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +21,9 @@ import sys
 import termios
 import time
 
+LIST_TIMEOUT_S = 15
+SELECTED_ROW = re.compile(r"❯.+?·bg·")
+
 
 def compact(text: str) -> str:
 	text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
@@ -22,38 +32,24 @@ def compact(text: str) -> str:
 
 
 def main() -> int:
-	print("READY", flush=True)
-	prompt = sys.argv[1] if len(sys.argv) > 1 else "Reply with only the word PICKED then stop."
-	master, slave = pty.openpty()
-	winsize = struct.pack("HHHH", 40, 120, 0, 0)
-	fcntl.ioctl(master, termios.TIOCSWINSZ, winsize)
-	fcntl.ioctl(slave, termios.TIOCSWINSZ, winsize)
-	pid = os.fork()
+	pid, master = pty.fork()
 	if pid == 0:
-		os.close(master)
-		os.dup2(slave, 0)
-		os.dup2(slave, 1)
-		os.dup2(slave, 2)
-		if slave > 2:
-			os.close(slave)
 		os.execvp("claude", ["claude", "--resume", "--dangerously-skip-permissions"])
-	os.close(slave)
+	fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 120, 0, 0))
 
+	def stop(_signum: int, _frame: object) -> None:
+		raise SystemExit(0)
+
+	signal.signal(signal.SIGTERM, stop)
 	buf = b""
-	sent_theme = False
-	sent_security = False
-	sent_trust = False
-	sent_pick = False
-	theme_at = 0.0
-	deadline = time.time() + 30
 
-	def read_more(timeout: float) -> None:
+	def read_for(seconds: float) -> None:
 		nonlocal buf
-		end = time.time() + timeout
-		while time.time() < end:
-			ready, _, _ = select.select([master], [], [], max(0.0, end - time.time()))
+		end = time.time() + seconds
+		while (left := end - time.time()) > 0:
+			ready, _, _ = select.select([master], [], [], left)
 			if not ready:
-				break
+				return
 			try:
 				chunk = os.read(master, 8192)
 			except OSError:
@@ -62,74 +58,34 @@ def main() -> int:
 				return
 			buf += chunk
 
+	def screen() -> str:
+		return compact(buf.decode("utf-8", "replace"))
+
 	try:
-		while time.time() < deadline:
-			read_more(0.25)
-			blob = compact(buf.decode("utf-8", "replace"))
-			if not sent_theme and (
-				"choosethetextstyle" in blob or ("darkmode" in blob and "welcome" in blob)
-			):
-				os.write(master, b"\r")
-				sent_theme = True
-				theme_at = time.time()
-				print("THEME", flush=True)
-				time.sleep(0.4)
-				continue
-			if sent_theme and not sent_security and "pressentertocontinue" in blob:
-				os.write(master, b"\r")
-				sent_security = True
-				print("SECURITY", flush=True)
-				time.sleep(0.4)
-				continue
-			if sent_theme and not sent_trust and "itrustthisfolder" in blob:
-				# Two stacked choices; default is "No, exit". Down selects Yes.
-				os.write(master, b"\x1b[B")
-				time.sleep(0.4)
-				read_more(0.4)
-				moved = compact(buf.decode("utf-8", "replace"))
-				print("TRUST_AFTER_DOWN", moved[-220:], flush=True)
-				os.write(master, b"\r")
-				sent_trust = True
-				print("TRUST", flush=True)
-				time.sleep(0.6)
-				continue
-			if sent_theme and sent_trust and not sent_pick and (
-				"resume" in blob
-				or "recent" in blob
-				or time.time() - theme_at > 6
-			):
-				print("AFTER_THEME", blob[-400:], flush=True)
-				try:
-					os.write(master, b"\x1b[B")
-					time.sleep(0.12)
-					os.write(master, b"\x1b[A")
-					time.sleep(0.12)
-					os.write(master, b"\r")
-				except OSError as err:
-					print(f"PICK_FAIL {err}", flush=True)
-					return 2
-				sent_pick = True
-				print("PICKED", flush=True)
-				time.sleep(0.5)
-				continue
-			if sent_pick:
-				while time.time() < deadline + 40:
-					read_more(0.5)
-					if os.waitpid(pid, os.WNOHANG)[0]:
-						return 0
+		deadline = time.time() + LIST_TIMEOUT_S
+		while not SELECTED_ROW.search(screen()):
+			if time.time() > deadline:
+				return 2
+			read_for(0.2)
+		print("LISTED", flush=True)
+		# Let the picker finish drawing; keys sent mid-render land in its search box.
+		settled = len(buf)
+		while True:
+			read_for(0.3)
+			if len(buf) == settled:
 				break
-		return 0 if sent_pick else 2
+			settled = len(buf)
+		os.write(master, b"\r")
+		print("PICKED", flush=True)
+		while True:
+			read_for(1)
+			if os.waitpid(pid, os.WNOHANG)[0]:
+				print("EXITED", flush=True)
+				return 1
 	finally:
-		try:
-			os.write(master, b"\x03")
-		except OSError:
-			pass
-		time.sleep(0.2)
+		print(f"SCREEN {screen()[-800:]}", flush=True)
 		try:
 			os.kill(pid, signal.SIGKILL)
-		except OSError:
-			pass
-		try:
 			os.waitpid(pid, 0)
 		except OSError:
 			pass

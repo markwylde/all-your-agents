@@ -45,7 +45,7 @@ test('omp on a terminal: live create, running before the transcript, idle, close
 			const session = aya.running().find(mine);
 			assert.equal(session?.kind, 'interactive');
 			assert.equal(session?.activity.lastTurn, 'completed');
-			assert.match(session?.model ?? '', /sonnet/i);
+			assert.ok(session?.model, 'the session reports its model');
 			stopInteractiveOmp(run);
 			await waitUntil(() => log.includes('close'), 8_000, said);
 			const startOfToday = new Date();
