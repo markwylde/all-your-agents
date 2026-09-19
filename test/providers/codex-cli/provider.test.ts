@@ -278,6 +278,56 @@ test('a lock for a thread with no rollout yet binds nothing', async () => {
 	});
 });
 
+test('a turn left open by a killed process is not running after resume', async () => {
+	await withHome(async (home) => {
+		const start = Date.now() - 1000;
+		const procs = fakeCodexProcesses(start);
+		procs.set(6, true, start);
+		const earlier = (ms: number) => new Date(start - ms).toISOString();
+		const path = rolloutPath(home, A);
+		// The last process was killed mid-turn: task_started, no task_complete or turn_aborted.
+		await writeRollout(path, [
+			sessionMeta(A, {}, earlier(86_400_000)),
+			eventMsg('task_started', {}, earlier(60_000)),
+		]);
+		procs.hold(6, path);
+		const aya = AllYourAgents({
+			providers: [codexCli({ home })],
+			processes: procs,
+			debounce: { quietMs: 10 },
+		});
+		await aya.start();
+		await waitFor(() => aya.running().some((s) => s.id === A));
+		assert.equal(aya.running().find((s) => s.id === A)?.status, 'idle');
+		await appendFile(path, `${JSON.stringify(eventMsg('task_started'))}\n`);
+		await waitFor(() => aya.running().find((s) => s.id === A)?.status === 'running');
+		await aya.stop();
+	});
+});
+
+test('a turn this process started is still running after bind', async () => {
+	await withHome(async (home) => {
+		const start = Date.now() - 1000;
+		const procs = fakeCodexProcesses(start);
+		procs.set(6, true, start);
+		const path = rolloutPath(home, A);
+		await writeRollout(path, [
+			sessionMeta(A, {}, new Date(start - 86_400_000).toISOString()),
+			eventMsg('task_started', {}, new Date(start + 500).toISOString()),
+		]);
+		procs.hold(6, path);
+		const aya = AllYourAgents({
+			providers: [codexCli({ home })],
+			processes: procs,
+			debounce: { quietMs: 10 },
+		});
+		await aya.start();
+		await waitFor(() => aya.running().some((s) => s.id === A));
+		assert.equal(aya.running().find((s) => s.id === A)?.status, 'running');
+		await aya.stop();
+	});
+});
+
 test('two sessions one pid; resume at start; missing home then created', async () => {
 	await withHome(async (home) => {
 		const start = Date.now() - 1000;

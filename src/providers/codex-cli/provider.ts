@@ -8,6 +8,7 @@ import { replayRecords } from './activity.ts';
 import {
 	deriveStatus,
 	type EventsState,
+	endStaleTurn,
 	envelope,
 	initialEventsState,
 	reduceRecord,
@@ -50,6 +51,8 @@ type Bound = {
 	cwd: string;
 	path: string;
 	events: EventsState;
+	/** Start time of the holding process, when the platform reports it. */
+	processStart?: number;
 	status?: 'running' | 'idle';
 	model?: string;
 	promptTitled: boolean;
@@ -420,6 +423,7 @@ export function codexCli(options: PathOptions = {}): Provider {
 			}
 			if (!ctx || bound.released || bound.path !== path) return;
 			const replay = replayRecords(records);
+			replay.facts.push(...endStaleTurn(replay.state, bound.processStart));
 			bound.events = replay.state;
 			reportModel(bound, replay.state.model);
 			if (replay.state.cwd) reportCwd(bound, replay.state.cwd);
@@ -477,6 +481,7 @@ export function codexCli(options: PathOptions = {}): Provider {
 			cwd: meta.cwd,
 			path,
 			events: initialEventsState(),
+			processStart: info.startTime,
 			promptTitled: false,
 			agents: new Map(),
 			closes: new Map(),

@@ -51,6 +51,10 @@ Codex defers creating a new rollout until the thread's first items are written (
 - **WHEN** a TUI quits leaving its lock behind, and a later process deletes and recreates that lock
 - **THEN** the new process is bound
 
+#### Scenario: Turn left open by a killed process
+- **WHEN** a resumed rollout's replay ends with a turn that started before the holding process did, with no end record
+- **THEN** that turn ends as interrupted at the process start, and the session is `idle` until a new turn starts
+
 #### Scenario: Lock before rollout
 - **WHEN** a lock appears for a thread with no rollout
 - **THEN** nothing is bound until the rollout is created and held
