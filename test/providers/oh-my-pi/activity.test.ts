@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { createLocalFs } from '../../../src/helpers/fs.js';
 import { createLocalSqlite } from '../../../src/helpers/sqlite.js';
 import type { Fs, Sqlite } from '../../../src/helpers/types.js';
 import { type AgentsError, AllYourAgents, type Provider } from '../../../src/index.js';
@@ -52,13 +51,10 @@ async function historyWriter(
 	await mkdir(join(home, 'agent'), { recursive: true });
 	const db = join(home, 'agent', 'history.db');
 	const child = sqliteWriter(db);
-	const run = (sql: string) => child.stdin.write(`${sql}\n`);
-	run(
+	const run = (sql: string) => child.run(sql);
+	await run(
 		`pragma journal_mode=wal; create table history(id INTEGER PRIMARY KEY AUTOINCREMENT, ${schema});`,
 	);
-	const fs = createLocalFs();
-	const started = Date.now();
-	while (Date.now() - started < 3000 && !(await fs.stat(`${db}-wal`))) await sleep(30);
 	return {
 		submit: (sessionId: string, prompt: string) =>
 			run(
@@ -74,7 +70,7 @@ test('first prompt of a new session: running, and titled, before any transcript 
 	await withHome(async (home) => {
 		const history = await historyWriter(home);
 		try {
-			history.submit(B, 'an old prompt from before we started');
+			await history.submit(B, 'an old prompt from before we started');
 			await sleep(100);
 			const procs = fakeOmpProcesses();
 			const { aya, errors, live } = observe(home, procs);
@@ -133,8 +129,7 @@ test('a prompt typed before keeps its row id, and still starts the first turn', 
 				`insert into history(prompt, created_at, cwd, session_id) values('${prompt}', ${Math.floor(Date.now() / 1000)}, '/tmp/app', '${sessionId}') on conflict(prompt) do update set created_at = excluded.created_at, cwd = excluded.cwd, session_id = excluded.session_id;`,
 			);
 		try {
-			upsert(B, 'commit');
-			await sleep(100);
+			await upsert(B, 'commit');
 			const procs = fakeOmpProcesses();
 			const { aya, errors, live } = observe(home, procs);
 			await aya.start();
