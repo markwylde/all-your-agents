@@ -1,0 +1,99 @@
+title: OpenCode provider - design decisions
+intro: |
+  What I found (opencode 1.18.31, source @ 34b4c3c, checked against your real data and a live idle TUI):
+
+  - Everything lives in ONE SQLite WAL database: ~/.local/share/opencode/opencode.db
+    (session / message / part tables, plus an append-only `event` table). The old JSON
+    storage/ layout is gone.
+  - There is NO registry: no pid file, no lock, no port file. Session busy/idle and pending
+    permission asks are in memory only. The only link from a process to its sessions is:
+    the process holds opencode.db open, its cwd equals session.directory, and argv
+    sometimes carries `-s ses_...`.
+  - A file-level fs.watch on opencode.db-wal fires on every commit, even though opencode
+    holds it open (I tested this). A directory watch sees nothing, as ADR 0002 predicts.
+  - A read-only second connection is safe while opencode writes.
+
+  These decisions change the specs, so I need them before writing the proposal.
+
+status: submitted
+submitted_at: "2026-09-19T09:05:55+01:00"
+
+questions:
+  - id: sqlite_reader
+    type: select
+    prompt: How should the library read the SQLite database?
+    help: |
+      I recommend node:sqlite behind an injected optional `sqlite` interface on the contexts
+      (like `fs` and `processes`). No new dependency, providers still never import node
+      modules directly, and a remote `fs` can supply its own or none. node:sqlite needs
+      Node >= 22.13; on older Node the OpenCode provider would emit nothing and the other
+      three keep working. package.json currently says engines node >= 20.
+    required: true
+    options:
+      - node:sqlite, injected, provider silent on old Node (recommended)
+      - node:sqlite, injected, and raise engines to node >= 22.13
+      - better-sqlite3 as an optional dependency
+      - shell out to the sqlite3 CLI
+    answer: node:sqlite, injected, provider silent on old Node (recommended)
+
+  - id: pid_binding
+    type: select
+    prompt: How do we bind a live opencode process to its session?
+    help: |
+      Needs a new optional one-time `Processes` probe for a pid's cwd and argv (lsof / ps on
+      macOS, /proc on Linux). Rule I recommend: pids come from holders(opencode.db); a pid
+      owns the root session named by `-s`, else the root session in its cwd written since
+      that process started (`-c` = most recently updated root session in that cwd). A new
+      root session written in that cwd is a conversation switch (close + open).
+      The question is what to do when TWO opencode processes share one cwd and argv
+      does not name the session.
+    required: true
+    options:
+      - Sessions are live with pid unset; they close when the last candidate process exits (recommended)
+      - Guess the most recently started process
+      - Fail closed - emit no live session while it is ambiguous
+    answer: Sessions are live with pid unset; they close when the last candidate process exits (recommended)
+    comment: We're gonna need to talk about this
+
+  - id: waiting_status
+    type: select
+    prompt: Pending permission asks never reach disk. What do we report?
+    help: |
+      The shared log has an `asking id=per_... permission=...` line but it carries no session
+      id and replies are not logged, so it cannot be tied to a session without guessing.
+      I recommend the same as Codex - never report `waiting`; a blocked session reads as
+      `running`, documented in the README matrix as a harness limit.
+    required: true
+    options:
+      - Never report waiting, same as Codex (recommended)
+      - Use the log line when exactly one opencode session is running, otherwise nothing
+    answer: Never report waiting, same as Codex (recommended)
+
+  - id: long_lived_servers
+    type: select
+    prompt: What about `opencode serve`, `opencode acp`, `opencode web` and the desktop app?
+    help: |
+      These own sessions in any directory, several at once, and their cwd/argv say nothing
+      about which. I recommend: for such a pid, a root session is live from its first write
+      after the process started until the process exits (many sessions per pid, like VS Code
+      Codex). It over-reports sessions the user has left, but never invents one.
+    required: true
+    options:
+      - Live from first write until the process exits (recommended)
+      - Out of scope for this change - TUI and `opencode run` only, servers appear in history only
+    answer: Live from first write until the process exits (recommended)
+
+  - id: live_tests
+    type: select
+    prompt: Opt-in live tests (AYA_LIVE=1) - which model route?
+    help: The Claude, Grok and Codex live tests use OpenRouter with OPENROUTER_API_KEY.
+    options:
+      - OpenRouter via OPENROUTER_API_KEY, same as the others (recommended)
+      - Your local `atlas` provider
+      - No live tests in this change
+    answer: OpenRouter via OPENROUTER_API_KEY, same as the others (recommended)
+
+  - id: anything_else
+    type: textarea
+    prompt: Anything about how you use opencode that I should design for?
+    help: For example the desktop app, `opencode serve` plus attach, a custom OPENCODE_DB, or non-release channels.

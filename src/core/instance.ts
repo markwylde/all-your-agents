@@ -1,8 +1,9 @@
 import { systemClock } from '../helpers/clock.ts';
 import { createLocalFs } from '../helpers/fs.ts';
 import { createLocalProcesses } from '../helpers/processes.ts';
+import { createLocalSqlite } from '../helpers/sqlite.ts';
 import { tailJsonl } from '../helpers/tail-jsonl.ts';
-import type { Processes } from '../helpers/types.ts';
+import type { Processes, Sqlite } from '../helpers/types.ts';
 import { watchDir } from '../helpers/watch-dir.ts';
 import { watchFile } from '../helpers/watch-file.ts';
 import type {
@@ -101,6 +102,14 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 	const quietMs = opts.debounce?.quietMs ?? 25;
 	const maxLatencyMs = opts.debounce?.maxLatencyMs ?? 1000;
 	const clock = opts.debounce?.clock ?? systemClock;
+	/** Absent when this runtime has no SQLite and the consumer supplied none. */
+	let sqlite: Sqlite | undefined = opts.sqlite || undefined;
+	const sqliteReady: Promise<void> =
+		opts.sqlite != null
+			? Promise.resolve()
+			: createLocalSqlite().then((reader) => {
+					sqlite = reader;
+				});
 
 	const listeners = new Map<string, Set<Listener>>();
 	const live = new Map<string, LiveEntry>();
@@ -471,9 +480,11 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		reportError: (error) => providerFailed(provider, error),
 		fs,
 		processes: processes as Processes,
+		...(sqlite ? { sqlite } : {}),
 		debounce: { quietMs, maxLatencyMs },
 		watchDir: (path, onChange) => watchDir(fs, path, onChange, { quietMs, maxLatencyMs, clock }),
-		watchFile: (path, onChange) => watchFile(fs, path, onChange, { quietMs, maxLatencyMs, clock }),
+		watchFile: (path, onChange, opts) =>
+			watchFile(fs, path, onChange, { ...opts, quietMs, maxLatencyMs, clock }),
 		tailJsonl: (path, opts) => tailJsonl(fs, path, { ...opts, quietMs, maxLatencyMs, clock }),
 		processInfo: (pid) => (processes as Processes).info(pid),
 		watchProcess: (pid, onExit) => (processes as Processes).watch(pid, onExit),
@@ -481,6 +492,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 
 	const makeListCtx = (filter?: SessionFilter, id?: string): ListContext => ({
 		fs,
+		...(sqlite ? { sqlite } : {}),
 		since: filter?.since,
 		id,
 	});
@@ -491,6 +503,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		signal?: AbortSignal,
 	): InspectContext => ({
 		fs,
+		...(sqlite ? { sqlite } : {}),
 		follow,
 		signal,
 		subagentId,
@@ -544,6 +557,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 	): AsyncGenerator<SessionEvent> {
 		const provider = providerOf(providerId);
 		if (!provider?.inspect || signal?.aborted) return;
+		await sqliteReady;
 		yield* provider.inspect(makeInspectCtx(follow, subagentId, signal), id);
 	}
 
@@ -552,6 +566,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		if (bag && bag.size > 0) return [...bag.values()].map((rec) => attachSub(rec, providerId));
 		const provider = providerOf(providerId);
 		if (!provider?.subagents) return [];
+		await sqliteReady;
 		const facts = await provider.subagents(makeInspectCtx(false), id);
 		return facts.map((f) => {
 			const rec: SubRecord = {
@@ -625,6 +640,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 			started = true;
 			catchingUp = true;
 			startPromise = (async () => {
+				await sqliteReady;
 				await Promise.all(
 					providers.map(async (provider) => {
 						try {
@@ -666,6 +682,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		},
 		async reconcile(pid) {
 			if (!started) return;
+			await sqliteReady;
 			for (const provider of providers) {
 				try {
 					await provider.revalidate?.(makeWatchCtx(provider), pid);
@@ -681,6 +698,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		async sessions(filter) {
 			// What is held in memory wins: it carries activity and status a snapshot cannot.
 			const out = [...live.values(), ...history.values()].map(attachSession);
+			await sqliteReady;
 			if (filter?.live !== true) {
 				for (const provider of providers) {
 					if (!provider.list) continue;
@@ -699,6 +717,7 @@ export function createAllYourAgents(opts: InstanceOptions = {}): AllYourAgents {
 		async get(id) {
 			const held = live.get(id) ?? history.get(id);
 			if (held) return attachSession(held);
+			await sqliteReady;
 			for (const provider of providers) {
 				if (!provider.list) continue;
 				try {

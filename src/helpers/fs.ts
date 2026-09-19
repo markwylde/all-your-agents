@@ -6,6 +6,7 @@ import type { Fs, FsStat, FsWatchEvent, WatchHandle } from './types.ts';
 function toStat(st: {
 	size: number;
 	mtimeMs: number;
+	ino: number;
 	isFile(): boolean;
 	isDirectory(): boolean;
 }): FsStat {
@@ -14,6 +15,7 @@ function toStat(st: {
 		mtimeMs: st.mtimeMs,
 		isFile: st.isFile(),
 		isDirectory: st.isDirectory(),
+		ino: st.ino,
 	};
 }
 

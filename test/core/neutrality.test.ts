@@ -16,7 +16,11 @@ function walk(dir: string): string[] {
 	return out;
 }
 
-const HARNESS_HOMES = /\.claude|\.grok|GROK_HOME|\.codex|CODEX_HOME/;
+const HARNESS_HOMES =
+	/\.claude|\.grok|GROK_HOME|\.codex|CODEX_HOME|\.omp|PI_CONFIG_DIR|PI_CODING_AGENT_DIR/;
+
+/** Providers read databases through the injected reader, in either import form. */
+const SQLITE_IMPORT = /['"]node:sqlite['"]/;
 
 test('core does not import providers or mention a harness home', () => {
 	const files = walk(join(src, 'core'));
@@ -29,7 +33,7 @@ test('core does not import providers or mention a harness home', () => {
 	}
 });
 
-test('providers do not import node:fs or node:child_process', () => {
+test('providers do not import node:fs, node:child_process or node:sqlite', () => {
 	let files: string[] = [];
 	try {
 		files = walk(join(src, 'providers'));
@@ -41,6 +45,7 @@ test('providers do not import node:fs or node:child_process', () => {
 		const rel = relative(src, file);
 		assert.equal(/from ['"]node:fs['"]/.test(text), false, rel);
 		assert.equal(/from ['"]node:child_process['"]/.test(text), false, rel);
+		assert.equal(SQLITE_IMPORT.test(text), false, rel);
 	}
 });
 
@@ -51,7 +56,12 @@ test('neutrality test fails when a violation is introduced', () => {
 	assert.ok(HARNESS_HOMES.test('process.env.GROK_HOME'));
 	assert.ok(HARNESS_HOMES.test(`const home = join(homedir(), '.codex');`));
 	assert.ok(HARNESS_HOMES.test('process.env.CODEX_HOME'));
+	assert.ok(HARNESS_HOMES.test(`const home = join(homedir(), '.omp');`));
+	assert.ok(HARNESS_HOMES.test('process.env.PI_CONFIG_DIR'));
+	assert.ok(HARNESS_HOMES.test('process.env.PI_CODING_AGENT_DIR'));
 	const fakeProvider = `import { readFile } from 'node:fs';\nimport { exec } from 'node:child_process';\n`;
 	assert.ok(/from ['"]node:fs['"]/.test(fakeProvider));
 	assert.ok(/from ['"]node:child_process['"]/.test(fakeProvider));
+	assert.ok(SQLITE_IMPORT.test(`import { DatabaseSync } from 'node:sqlite';`));
+	assert.ok(SQLITE_IMPORT.test(`await import('node:sqlite')`));
 });

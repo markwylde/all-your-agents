@@ -4,8 +4,9 @@ import type { InstanceOptions } from './provider.ts';
 import { claudeCode } from './providers/claude-code/index.ts';
 import { codexCli } from './providers/codex-cli/index.ts';
 import { grokBuild } from './providers/grok-build/index.ts';
+import { ohMyPi } from './providers/oh-my-pi/index.ts';
 
-export const builtInProviders = [claudeCode(), grokBuild(), codexCli()];
+export const builtInProviders = [claudeCode(), grokBuild(), codexCli(), ohMyPi()];
 
 export function AllYourAgents(opts: InstanceOptions = {}): Instance {
 	return createAllYourAgents({
@@ -14,7 +15,7 @@ export function AllYourAgents(opts: InstanceOptions = {}): Instance {
 	});
 }
 
-export { claudeCode, codexCli, grokBuild };
+export { claudeCode, codexCli, grokBuild, ohMyPi };
 
 export default AllYourAgents;
 
@@ -25,11 +26,20 @@ export {
 	coalesce,
 	createLocalFs,
 	createLocalProcesses,
+	createLocalSqlite,
 	tailJsonl,
 	watchDir,
 	watchFile,
 } from './helpers/index.ts';
-export type { Clock, DebounceOptions, Fs, Processes } from './helpers/types.ts';
+export type {
+	Clock,
+	DebounceOptions,
+	Fs,
+	Processes,
+	Sqlite,
+	SqliteRow,
+	SqliteValue,
+} from './helpers/types.ts';
 export type {
 	InspectContext,
 	InstanceOptions,

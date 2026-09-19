@@ -1,0 +1,256 @@
+{
+	"root": [
+		{
+			"kind": "user"
+		},
+		{
+			"kind": "title",
+			"source": "harness"
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "turn-end",
+			"outcome": "completed"
+		},
+		{
+			"kind": "user"
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "tool",
+			"id": "call-2ab9f297-09ed-4ff4-a966-d5d240728ae3-0|fc_65001320-5fa9-97fe-a743-f55835223f2e_0",
+			"name": "task"
+		},
+		{
+			"kind": "tool-result",
+			"id": "call-2ab9f297-09ed-4ff4-a966-d5d240728ae3-0|fc_65001320-5fa9-97fe-a743-f55835223f2e_0",
+			"isError": false
+		},
+		{
+			"kind": "subagent",
+			"id": "MulSeventeenTwentyThree",
+			"type": "sonic",
+			"background": true
+		},
+		{
+			"kind": "subagent",
+			"id": "DivOneFortyFour",
+			"type": "sonic",
+			"background": true
+		},
+		{
+			"kind": "subagent",
+			"id": "PowTwoTen",
+			"type": "sonic",
+			"background": true
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "tool",
+			"id": "call-673f8e88-1573-4eff-9dd8-0a3f2a81e86d-1|fc_0b1a4768-a950-9fba-994a-a095b7c75f37_0",
+			"name": "hub"
+		},
+		{
+			"kind": "tool-result",
+			"id": "call-673f8e88-1573-4eff-9dd8-0a3f2a81e86d-1|fc_0b1a4768-a950-9fba-994a-a095b7c75f37_0",
+			"isError": false
+		},
+		{
+			"kind": "subagent-end",
+			"id": "MulSeventeenTwentyThree",
+			"status": "completed"
+		},
+		{
+			"kind": "tool",
+			"id": "call-1ce44f02-a316-44fc-baf4-f2cb3d2f2051-2|fc_37fa9e86-e600-9283-badd-2972f3850a1a_0",
+			"name": "hub"
+		},
+		{
+			"kind": "tool-result",
+			"id": "call-1ce44f02-a316-44fc-baf4-f2cb3d2f2051-2|fc_37fa9e86-e600-9283-badd-2972f3850a1a_0",
+			"isError": false
+		},
+		{
+			"kind": "subagent-end",
+			"id": "DivOneFortyFour",
+			"status": "completed"
+		},
+		{
+			"kind": "subagent-end",
+			"id": "PowTwoTen",
+			"status": "completed"
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "turn-end",
+			"outcome": "completed"
+		}
+	],
+	"nested": [
+		{
+			"kind": "user"
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "tool",
+			"id": "call-a0d24009-459d-44b8-a3f3-32979657f4be-0|fc_a8bf7780-d9a8-968e-895a-42a149649d1f_0",
+			"name": "todo"
+		},
+		{
+			"kind": "tool",
+			"id": "call-a0d24009-459d-44b8-a3f3-32979657f4be-1|fc_a8bf7780-d9a8-968e-895a-42a149649d1f_1",
+			"name": "task"
+		},
+		{
+			"kind": "tool-result",
+			"id": "call-a0d24009-459d-44b8-a3f3-32979657f4be-0|fc_a8bf7780-d9a8-968e-895a-42a149649d1f_0",
+			"isError": false
+		},
+		{
+			"kind": "tool-result",
+			"id": "call-a0d24009-459d-44b8-a3f3-32979657f4be-1|fc_a8bf7780-d9a8-968e-895a-42a149649d1f_1",
+			"isError": false
+		},
+		{
+			"kind": "subagent",
+			"id": "NestParent",
+			"type": "task",
+			"background": true
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "tool",
+			"id": "call-4728a6dd-f4e2-468e-a7a7-f4a4fb954a79-2|fc_86826dc3-8862-9883-8d57-78bd90c03388_0",
+			"name": "hub"
+		},
+		{
+			"kind": "tool-result",
+			"id": "call-4728a6dd-f4e2-468e-a7a7-f4a4fb954a79-2|fc_86826dc3-8862-9883-8d57-78bd90c03388_0",
+			"isError": false
+		},
+		{
+			"kind": "tool",
+			"id": "call-8b579eac-d3c2-44d2-83ec-b571b6252c0d-3|fc_fff6d154-6ea1-9935-935f-bdd48669b8cd_0",
+			"name": "hub"
+		},
+		{
+			"kind": "tool-result",
+			"id": "call-8b579eac-d3c2-44d2-83ec-b571b6252c0d-3|fc_fff6d154-6ea1-9935-935f-bdd48669b8cd_0",
+			"isError": false
+		},
+		{
+			"kind": "subagent-end",
+			"id": "NestParent",
+			"status": "completed"
+		},
+		{
+			"kind": "tool",
+			"id": "call-d6bbe4e1-4353-4be3-b3f9-60359034827f-4|fc_29151882-fb26-97da-be41-92d4bd94c850_0",
+			"name": "todo"
+		},
+		{
+			"kind": "tool-result",
+			"id": "call-d6bbe4e1-4353-4be3-b3f9-60359034827f-4|fc_29151882-fb26-97da-be41-92d4bd94c850_0",
+			"isError": false
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "turn-end",
+			"outcome": "completed"
+		}
+	],
+	"ask-wait": [
+		{
+			"kind": "user"
+		},
+		{
+			"kind": "tool",
+			"id": "call-406d0a54-72b3-47dc-8a63-f4c8c1d71626-0|fc_566fd6c2-863e-97ba-aca5-e2bd32a2dda3_0",
+			"name": "ask"
+		},
+		{
+			"kind": "title",
+			"source": "harness"
+		},
+		{
+			"kind": "tool-result",
+			"id": "call-406d0a54-72b3-47dc-8a63-f4c8c1d71626-0|fc_566fd6c2-863e-97ba-aca5-e2bd32a2dda3_0",
+			"isError": false
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "turn-end",
+			"outcome": "completed"
+		},
+		{
+			"kind": "user"
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "turn-end",
+			"outcome": "completed"
+		}
+	],
+	"error-turn": [
+		{
+			"kind": "user"
+		},
+		{
+			"kind": "error",
+			"message": "provider error"
+		},
+		{
+			"kind": "turn-end",
+			"outcome": "failed"
+		}
+	],
+	"print-mode": [
+		{
+			"kind": "user"
+		},
+		{
+			"kind": "assistant",
+			"model": "xai-oauth/grok-4.6"
+		},
+		{
+			"kind": "turn-end",
+			"outcome": "completed"
+		}
+	],
+	"aborted-turn.synthetic": [
+		{
+			"kind": "user"
+		},
+		{
+			"kind": "turn-end",
+			"outcome": "interrupted"
+		}
+	]
+}

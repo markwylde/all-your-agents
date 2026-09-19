@@ -4,11 +4,13 @@ import AllYourAgents, {
 	claudeCode,
 	codexCli,
 	grokBuild,
+	ohMyPi,
 } from '../../src/index.js';
 import {
 	createCodexFixtureDriver,
 	createGrokFixtureDriver,
 	createMemoryHarness,
+	createOmpFixtureDriver,
 	defineConformanceTests,
 } from '../../src/testing/index.js';
 
@@ -18,6 +20,7 @@ const aya = AllYourAgents({
 		claudeCode({ home: '/tmp/claude' }),
 		grokBuild({ home: '/tmp/grok' }),
 		codexCli({ home: '/tmp/codex' }),
+		ohMyPi({ home: '/tmp/omp' }),
 	],
 	debounce: { quietMs: 25, maxLatencyMs: 1000 },
 });
@@ -50,6 +53,11 @@ defineConformanceTests({
 	name: 'codex-cli',
 	provider: codexCli({ home: '/tmp/codex' }),
 	driver: createCodexFixtureDriver('/tmp/codex'),
+});
+defineConformanceTests({
+	name: 'oh-my-pi',
+	provider: ohMyPi({ home: '/tmp/omp' }),
+	driver: createOmpFixtureDriver('/tmp/omp'),
 });
 void AllYourAgents({ providers: [claudeCode()] });
 

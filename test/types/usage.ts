@@ -1,7 +1,9 @@
 import type { Fs, Processes } from '../../src/helpers/types.js';
+import { AllYourAgents } from '../../src/index.js';
 import type { Provider, WatchContext } from '../../src/provider.js';
 import { codexCli } from '../../src/providers/codex-cli/index.js';
 import { grokBuild } from '../../src/providers/grok-build/index.js';
+import { ohMyPi } from '../../src/providers/oh-my-pi/index.js';
 import type {
 	EventMeta,
 	Harness,
@@ -108,3 +110,9 @@ void grokHarness;
 
 const codex: Provider = codexCli({ home: '/tmp/codex' });
 void codex.harness;
+
+const omp: Provider = ohMyPi({ home: '/tmp/omp' });
+void omp.harness;
+// A consumer may bring its own SQLite reader, or turn the built-in one off.
+void AllYourAgents({ providers: [omp], sqlite: false });
+void AllYourAgents({ providers: [omp], sqlite: { query: async () => [] } });

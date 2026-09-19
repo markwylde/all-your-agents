@@ -72,6 +72,20 @@ jobs:
           done
           echo "Codex CLI install failed after retries"
           exit 1
+      - uses: oven-sh/setup-bun@v2
+      - name: Install oh-my-pi
+        env:
+          OMP_VERSION: 18.2.6
+        run: |
+          for i in 1 2 3 4; do
+            if bun install -g "@oh-my-pi/pi-coding-agent@$OMP_VERSION" && "$HOME/.bun/bin/omp" --version; then
+              echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+              exit 0
+            fi
+            sleep $((i * 4))
+          done
+          echo "oh-my-pi install failed after retries"
+          exit 1
       - name: Live e2e
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

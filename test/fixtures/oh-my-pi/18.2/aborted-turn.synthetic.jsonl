@@ -1,0 +1,7 @@
+{"type":"title","v":1,"title":"","updatedAt":"2026-09-19T08:30:59.911Z","pad":""}
+{"type":"session","version":3,"id":"00000000-0000-4000-8000-0000000000ab","timestamp":"2026-09-19T08:30:59.911Z","cwd":"/home/u/proj"}
+{"type":"model_change","id":"1c4635ac","parentId":null,"timestamp":"2026-09-19T08:30:59.939Z","model":"cursor/claude-4.6-opus-high","resolvedModelIsFallback":false}
+{"type":"thinking_level_change","id":"74305079","parentId":"1c4635ac","timestamp":"2026-09-19T08:30:59.939Z","thinkingLevel":"thinkingLevel 1","configured":null}
+{"type":"message","id":"d4f97aa0","parentId":"74305079","timestamp":"2026-09-19T08:31:17.187Z","message":{"role":"user","content":[{"type":"text","text":"text 2"}],"attribution":"user","timestamp":1789806677144}}
+{"type":"message","id":"cab49083","parentId":"d4f97aa0","timestamp":"2026-09-19T08:31:17.509Z","message":{"role":"assistant","content":[],"api":"cursor-agent","provider":"cursor","model":"claude-4.6-opus-high","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"aborted","timestamp":1789806677189,"errorClassificationMessage":"errorClassificationMessage 3","duration":294.7620419999985,"completedAt":1789806677506}}
+{"type":"custom","customType":"session_exit","data":{"reason":"dispose","kind":"normal","recordedAt":"2026-09-19T08:31:36.465Z"},"id":"07c25c14","parentId":"cab49083","timestamp":"2026-09-19T08:31:36.465Z"}

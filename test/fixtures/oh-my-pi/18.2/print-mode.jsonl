@@ -1,0 +1,8 @@
+{"type":"title","v":1,"title":"","updatedAt":"2026-09-19T08:34:36.722Z","pad":""}
+{"type":"session","version":3,"id":"00000000-0000-4000-8000-0000000000e2","timestamp":"2026-09-19T08:34:36.722Z","cwd":"/home/u/proj"}
+{"type":"model_change","id":"c58150bf","parentId":null,"timestamp":"2026-09-19T08:34:36.738Z","model":"xai-oauth/grok-4.6","resolvedModelIsFallback":false}
+{"type":"thinking_level_change","id":"6e1bfa9d","parentId":"c58150bf","timestamp":"2026-09-19T08:34:36.738Z","thinkingLevel":"thinkingLevel 102","configured":null}
+{"type":"message","id":"e5d17dde","parentId":"6e1bfa9d","timestamp":"2026-09-19T08:34:36.804Z","message":{"role":"user","content":[{"type":"text","text":"text 103"}],"attribution":"user","timestamp":1789806876767}}
+{"type":"message","id":"4435e4f6","parentId":"e5d17dde","timestamp":"2026-09-19T08:34:40.390Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"thinking 104"},{"type":"text","text":"text 105"}],"api":"openai-responses","provider":"xai-oauth","model":"grok-4.6","usage":{"input":18536,"output":133,"cacheRead":512,"cacheWrite":0,"totalTokens":19181,"reasoningTokens":52,"cost":{"input":0.037072,"output":0.000798,"cacheRead":0.000256,"cacheWrite":0,"total":0.038126}},"stopReason":"stop","timestamp":1789806876807,"duration":3582.4705420000005,"ttft":2658.729083,"completedAt":1789806880390}}
+{"type":"credential_pin","id":"9550e276","parentId":"4435e4f6","timestamp":"2026-09-19T08:34:40.394Z","provider":"xai-oauth"}
+{"type":"custom","customType":"session_exit","data":{"reason":"dispose","kind":"normal","recordedAt":"2026-09-19T08:34:40.399Z"},"id":"e1df9369","parentId":"9550e276","timestamp":"2026-09-19T08:34:40.399Z"}

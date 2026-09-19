@@ -1,0 +1,106 @@
+{
+	"root": {
+		"status": {
+			"status": "idle"
+		},
+		"facts": [
+			"turn-started",
+			"turn-ended",
+			"turn-started",
+			"tool-started",
+			"tool-finished",
+			"tool-started",
+			"tool-finished",
+			"tool-started",
+			"tool-finished",
+			"turn-ended"
+		],
+		"activity": {
+			"openSubagents": 0,
+			"lastTurn": "completed",
+			"lastTurnEndedAt": 1789806761804
+		},
+		"model": "xai-oauth/grok-4.6"
+	},
+	"nested": {
+		"status": {
+			"status": "idle"
+		},
+		"facts": [
+			"turn-started",
+			"tool-started",
+			"tool-started",
+			"tool-finished",
+			"tool-finished",
+			"tool-started",
+			"tool-finished",
+			"tool-started",
+			"tool-finished",
+			"tool-started",
+			"tool-finished",
+			"turn-ended"
+		],
+		"activity": {
+			"openSubagents": 0,
+			"lastTurn": "completed",
+			"lastTurnEndedAt": 1789809366677
+		},
+		"model": "xai-oauth/grok-4.6"
+	},
+	"ask-wait": {
+		"status": {
+			"status": "idle"
+		},
+		"facts": [
+			"turn-started",
+			"tool-started",
+			"tool-finished",
+			"turn-ended",
+			"turn-started",
+			"turn-ended"
+		],
+		"activity": {
+			"openSubagents": 0,
+			"lastTurn": "completed",
+			"lastTurnEndedAt": 1789809304980
+		},
+		"model": "xai-oauth/grok-4.6"
+	},
+	"error-turn": {
+		"status": {
+			"status": "idle"
+		},
+		"facts": ["turn-started", "turn-ended"],
+		"activity": {
+			"openSubagents": 0,
+			"lastTurn": "failed",
+			"lastTurnEndedAt": 1789806677509,
+			"error": "provider error"
+		},
+		"model": "cursor/claude-4.6-opus-high"
+	},
+	"print-mode": {
+		"status": {
+			"status": "idle"
+		},
+		"facts": ["turn-started", "turn-ended"],
+		"activity": {
+			"openSubagents": 0,
+			"lastTurn": "completed",
+			"lastTurnEndedAt": 1789806880390
+		},
+		"model": "xai-oauth/grok-4.6"
+	},
+	"aborted-turn.synthetic": {
+		"status": {
+			"status": "idle"
+		},
+		"facts": ["turn-started", "turn-ended"],
+		"activity": {
+			"openSubagents": 0,
+			"lastTurn": "interrupted",
+			"lastTurnEndedAt": 1789806677509
+		},
+		"model": "cursor/claude-4.6-opus-high"
+	}
+}

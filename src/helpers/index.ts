@@ -4,6 +4,7 @@ export { coalesce } from './coalesce.ts';
 export { createLocalFs, isEnoent } from './fs.ts';
 export { installTimerGuard } from './no-timers.ts';
 export { createLocalProcesses, koffiAvailable, parseLstart } from './processes.ts';
+export { createLocalSqlite } from './sqlite.ts';
 export { tailJsonl } from './tail-jsonl.ts';
 export type {
 	Clock,
@@ -18,6 +19,10 @@ export type {
 	ProcessInfo,
 	ProcessWatchHandle,
 	ProcessWatchResult,
+	Sqlite,
+	SqliteRow,
+	SqliteValue,
+	WatchFileOptions,
 	WatchHandle,
 } from './types.ts';
 export { watchDir } from './watch-dir.ts';

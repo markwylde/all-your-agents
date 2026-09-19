@@ -140,6 +140,11 @@ export function createLocalProcesses(
 			else if (platform() === 'linux') held = await linuxHeldUnder(directory);
 			return held.filter((row) => row.pid !== process.pid);
 		},
+		async tty(pid) {
+			if (platform() === 'darwin') return macTty(pid);
+			if (platform() === 'linux') return linuxTty(pid);
+			return undefined;
+		},
 		async close() {
 			watchers.clear();
 			retire();
@@ -266,6 +271,28 @@ async function macHeldUnder(directory: string): Promise<FileHolder[]> {
 		const code = (error as { status?: number }).status;
 		if (code === 1) return [];
 		return [];
+	}
+}
+
+/** `ps` prints the controlling terminal's name below `/dev`, or `??` when there is none. */
+async function macTty(pid: number): Promise<string | undefined> {
+	try {
+		const { stdout } = await execFileAsync('ps', ['-o', 'tty=', '-p', String(pid)]);
+		const name = stdout.trim();
+		return name && !name.startsWith('?') ? name : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Where stdin points, as harnesses that record their terminal resolve it themselves. */
+async function linuxTty(pid: number): Promise<string | undefined> {
+	try {
+		const target = await readlink(join('/proc', String(pid), 'fd', '0'));
+		if (!/^\/dev\/(pts\/\d+|tty\w*)$/.test(target)) return undefined;
+		return target.slice('/dev/'.length);
+	} catch {
+		return undefined;
 	}
 }
 

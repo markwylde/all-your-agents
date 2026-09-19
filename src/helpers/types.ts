@@ -15,6 +15,8 @@ export type FsStat = {
 	mtimeMs: number;
 	isFile: boolean;
 	isDirectory: boolean;
+	/** The inode, where the filesystem has one: tells a replaced file from a rewritten one. */
+	ino?: number;
 };
 
 export type FsWatchEvent = {
@@ -68,12 +70,38 @@ export type Processes = {
 	 * One-time: open files under `directory` and the pid holding each. Optional.
 	 */
 	heldUnder?(directory: string): Promise<FileHolder[]>;
+	/**
+	 * One-time: the process's controlling terminal as the device path below `/dev`
+	 * (`ttys024`, `pts/3`), or nothing when it has none. Optional; a provider whose harness
+	 * records the terminal a session runs in uses it to join a pid to that record.
+	 */
+	tty?(pid: number): Promise<string | undefined>;
+};
+
+export type SqliteValue = string | number | bigint | Uint8Array | null;
+
+export type SqliteRow = Record<string, SqliteValue>;
+
+/**
+ * Read-only SQLite access. The only way a provider reads a database file. Each call opens
+ * the file, runs one query, and closes it, so nothing is held between notifications.
+ */
+export type Sqlite = {
+	query(path: string, sql: string, params?: SqliteValue[]): Promise<SqliteRow[]>;
 };
 
 export type DirChange = {
 	type: 'create' | 'change' | 'delete';
 	name: string;
 	path: string;
+};
+
+export type WatchFileOptions = DebounceOptions & {
+	/**
+	 * Also watch the file itself. A directory watch on macOS reports nothing for writes made
+	 * through a handle the writer keeps open (a SQLite WAL, for example).
+	 */
+	heldOpen?: boolean;
 };
 
 export type FileChange = {
