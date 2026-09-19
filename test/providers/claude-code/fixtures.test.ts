@@ -21,12 +21,12 @@ test('captured journal mapping matches expected kinds', () => {
 });
 
 test('compat: session file allowed fields', () => {
-	const session = JSON.parse(readFileSync(join(dir, 'session.json'), 'utf8')) as Record<
-		string,
-		unknown
-	>;
-	for (const key of Object.keys(session)) {
-		assert.ok(allowedSessionFields.includes(key), `unexpected field ${key}`);
+	const files = ['session.json', 'session-spare.json', 'session-job.json', 'session-parked.json'];
+	for (const name of files) {
+		const session = JSON.parse(readFileSync(join(dir, name), 'utf8')) as Record<string, unknown>;
+		for (const key of Object.keys(session)) {
+			assert.ok(allowedSessionFields.includes(key), `unexpected field ${key} in ${name}`);
+		}
 	}
 });
 

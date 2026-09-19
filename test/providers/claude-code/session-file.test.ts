@@ -71,3 +71,25 @@ test('oversized file is rejected', () => {
 	);
 	assert.equal(parseSessionFile(123, big, { alive: true, startTime: start }), undefined);
 });
+
+test('daemon fields are kept when well typed', () => {
+	const parsed = parseSessionFile(
+		123,
+		file({ spare: true, jobId: 'e32386cc', parkedJobId: '7a6f4abc' }),
+		{ alive: true, startTime: start },
+	);
+	assert.equal(parsed?.spare, true);
+	assert.equal(parsed?.jobId, 'e32386cc');
+	assert.equal(parsed?.parkedJobId, '7a6f4abc');
+});
+
+test('mistyped daemon fields are ignored', () => {
+	const parsed = parseSessionFile(123, file({ spare: 'yes', jobId: 7, parkedJobId: '' }), {
+		alive: true,
+		startTime: start,
+	});
+	assert.equal(parsed?.sessionId, id);
+	assert.equal(parsed?.spare, undefined);
+	assert.equal(parsed?.jobId, undefined);
+	assert.equal(parsed?.parkedJobId, undefined);
+});

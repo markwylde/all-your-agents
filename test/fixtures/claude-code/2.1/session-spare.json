@@ -1,0 +1,15 @@
+{
+	"pid": 10002,
+	"sessionId": "22222222-2222-4222-8222-222222222222",
+	"cwd": "/tmp/fixture-project",
+	"startedAt": 1700000000000,
+	"version": "2.1.278",
+	"kind": "bg",
+	"entrypoint": "cli",
+	"name": "22222222",
+	"jobId": "22222222",
+	"spare": true,
+	"status": "idle",
+	"updatedAt": 1700000000000,
+	"statusUpdatedAt": 1700000000000
+}

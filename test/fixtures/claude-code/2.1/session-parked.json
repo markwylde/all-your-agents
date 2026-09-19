@@ -1,0 +1,14 @@
+{
+	"pid": 10004,
+	"sessionId": "44444444-4444-4444-8444-444444444444",
+	"cwd": "/tmp/fixture-project",
+	"startedAt": 1700000000000,
+	"version": "2.1.278",
+	"kind": "interactive",
+	"entrypoint": "cli",
+	"name": "fixture-project-43",
+	"parkedJobId": "33333333",
+	"status": "idle",
+	"updatedAt": 1700000001000,
+	"statusUpdatedAt": 1700000001000
+}
