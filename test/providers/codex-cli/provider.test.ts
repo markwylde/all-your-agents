@@ -102,13 +102,13 @@ test('create after start; conversation switch re-probes A with no event on A', a
 		aya.on('session:close', (s) => events.push(`close:${s.id}`));
 		await aya.start();
 		const aPath = rolloutPath(home, A);
-		await writeRollout(aPath, [sessionMeta(A)]);
 		procs.hold(9, aPath);
+		await writeRollout(aPath, [sessionMeta(A)]);
 		await waitFor(() => events.includes(`create:${A}`));
 		const bPath = rolloutPath(home, B);
 		procs.drop(9, aPath);
-		await writeRollout(bPath, [sessionMeta(B)]);
 		procs.hold(9, bPath);
+		await writeRollout(bPath, [sessionMeta(B)]);
 		await waitFor(() => events.includes(`close:${A}`) && events.includes(`create:${B}`));
 		assert.ok(
 			events.indexOf(`close:${A}`) < events.indexOf(`create:${B}`) || events.includes(`close:${A}`),
@@ -361,8 +361,8 @@ test('two sessions one pid; resume at start; missing home then created', async (
 		});
 		await aya.start();
 		const path = rolloutPath(missing, A);
-		await writeRollout(path, [sessionMeta(A)]);
 		procs.hold(1, path);
+		await writeRollout(path, [sessionMeta(A)]);
 		await waitFor(() => aya.running().some((s) => s.id === A));
 		await aya.stop();
 	} finally {
