@@ -57,6 +57,19 @@ type Tail = AsyncIterable<unknown> & { close(): void };
 export function claudeCode(options: PathOptions = {}): Provider {
 	let ctx: WatchContext | undefined;
 	const bounds = new Map<number, Bound>();
+	/**
+	 * Interactive session files whose conversation a live background job has taken over
+	 * (`parkedJobId` names that job's `jobId`). The job's row carries the conversation;
+	 * these are serviced again when the job goes away.
+	 */
+	const parked = new Map<number, { filePath: string; jobId: string }>();
+	/**
+	 * Parked files seen during the initial scan, before their job's file may have been
+	 * read. They are serviced once the scan is done, so a parked terminal never opens
+	 * only to be closed a moment later.
+	 */
+	const deferred = new Set<string>();
+	let scanning = false;
 	let processWatchUnsupported = false;
 	let closed = false;
 
@@ -85,6 +98,23 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		bound.childCloses.clear();
 		bound.processWatch?.stop();
 		bounds.delete(bound.pid);
+		const jobId = bound.session.jobId;
+		if (jobId && !closed) {
+			for (const [pid, entry] of parked) {
+				if (entry.jobId !== jobId) continue;
+				parked.delete(pid);
+				void inOrder(entry.filePath, () => serviceFile(entry.filePath));
+			}
+		}
+	};
+
+	const liveJob = (jobId: string, pid: number): Bound | undefined =>
+		[...bounds.values()].find((b) => b.pid !== pid && b.session.jobId === jobId);
+
+	const park = (bound: Bound, jobId: string): void => {
+		emitClose(bound);
+		teardown(bound);
+		parked.set(bound.pid, { filePath: bound.filePath, jobId });
 	};
 
 	/**
@@ -397,6 +427,28 @@ export function claudeCode(options: PathOptions = {}): Provider {
 
 	const bind = async (filePath: string, parsed: ParsedSessionFile): Promise<void> => {
 		if (!ctx) return;
+		parked.delete(parsed.pid);
+		if (parsed.spare) {
+			const byPid = bounds.get(parsed.pid);
+			if (byPid) {
+				emitClose(byPid);
+				teardown(byPid);
+			}
+			return;
+		}
+		if (parsed.parkedJobId && liveJob(parsed.parkedJobId, parsed.pid)) {
+			const byPid = bounds.get(parsed.pid);
+			if (byPid) {
+				emitClose(byPid);
+				teardown(byPid);
+			}
+			parked.set(parsed.pid, { filePath, jobId: parsed.parkedJobId });
+			return;
+		}
+		if (parsed.parkedJobId && scanning) {
+			deferred.add(filePath);
+			return;
+		}
 		const existing = [...bounds.values()].find(
 			(b) => b.session.sessionId === parsed.sessionId && b.pid === parsed.pid,
 		);
@@ -425,6 +477,12 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			released: false,
 		};
 		bounds.set(parsed.pid, bound);
+		const jobId = parsed.jobId;
+		if (jobId) {
+			for (const other of [...bounds.values()]) {
+				if (other !== bound && other.session.parkedJobId === jobId) park(other, jobId);
+			}
+		}
 		const verb = journal ? 'session:open' : 'session:create';
 		ctx.emit(verb, {
 			id: parsed.sessionId,
@@ -551,6 +609,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		try {
 			bytes = await ctx.fs.readFile(path, { maxBytes: SESSION_FILE_MAX_BYTES });
 		} catch {
+			parked.delete(filenamePid);
 			const bound = bounds.get(filenamePid);
 			if (bound) {
 				emitClose(bound);
@@ -561,7 +620,10 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		const info = await ctx.processInfo(filenamePid);
 		if (!ctx || closed) return;
 		const parsed = parseSessionFile(filenamePid, bytes, info);
-		if (!parsed) return;
+		if (!parsed) {
+			parked.delete(filenamePid);
+			return;
+		}
 		await bind(path, parsed);
 	};
 
@@ -585,12 +647,15 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			closed = false;
 			const home = homeOf();
 			const dir = sessionsDir(home);
+			scanning = true;
 			const watcher = watchCtx.watchDir(dir, (event) => {
 				if (closed) return;
 				void inOrder(event.path, async () => {
 					if (closed) return;
 					if (event.type === 'delete') {
 						const pid = Number(basename(event.path).replace(/\.json$/, ''));
+						parked.delete(pid);
+						deferred.delete(event.path);
 						const bound = bounds.get(pid);
 						if (bound) {
 							emitClose(bound);
@@ -605,10 +670,16 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			await watcher.ready;
 			// The initial scan has queued every session file already there.
 			await Promise.all(queues.values());
+			scanning = false;
+			for (const path of deferred) void inOrder(path, () => serviceFile(path));
+			deferred.clear();
+			await Promise.all(queues.values());
 			return () => {
 				closed = true;
 				watcher.close();
 				for (const bound of [...bounds.values()]) teardown(bound);
+				parked.clear();
+				deferred.clear();
 				ctx = undefined;
 			};
 		},

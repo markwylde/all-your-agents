@@ -19,6 +19,9 @@ const ALLOWED = new Set([
 	'updatedAt',
 	'kind',
 	'entrypoint',
+	'spare',
+	'jobId',
+	'parkedJobId',
 ]);
 
 export type ParsedSessionFile = {
@@ -34,6 +37,12 @@ export type ParsedSessionFile = {
 	updatedAt?: number;
 	kind?: SessionKind;
 	entrypoint?: string;
+	/** A pre-warmed daemon process nobody has claimed yet. */
+	spare?: boolean;
+	/** The background job this process runs. */
+	jobId?: string;
+	/** The background job an interactive process has handed its conversation to. */
+	parkedJobId?: string;
 };
 
 export function parseSessionFile(
@@ -74,6 +83,11 @@ export function parseSessionFile(
 	if (typeof picked.updatedAt === 'number') out.updatedAt = picked.updatedAt;
 	if (kind) out.kind = kind;
 	if (typeof picked.entrypoint === 'string') out.entrypoint = picked.entrypoint;
+	if (picked.spare === true) out.spare = true;
+	if (typeof picked.jobId === 'string' && picked.jobId) out.jobId = picked.jobId;
+	if (typeof picked.parkedJobId === 'string' && picked.parkedJobId) {
+		out.parkedJobId = picked.parkedJobId;
+	}
 	return out;
 }
 
