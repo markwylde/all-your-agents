@@ -104,6 +104,56 @@ export function toolResult(
 	});
 }
 
+/** A `bash` result omp moved to the background: the job outlives the call. */
+export function backgrounded(toolCallId: string, jobId: string, at?: number) {
+	return entry(
+		'message',
+		{
+			message: {
+				role: 'toolResult',
+				toolCallId,
+				toolName: 'bash',
+				content: [
+					{
+						type: 'text',
+						text: `Backgrounded as job ${jobId}; result will be delivered automatically.`,
+					},
+				],
+				details: { async: { state: 'running', jobId, type: 'bash' }, timeoutSeconds: 120 },
+			},
+		},
+		at,
+	);
+}
+
+/** The note omp injects when background jobs report back. */
+export function asyncResult(jobIds: string[], at?: number) {
+	return entry(
+		'custom_message',
+		{
+			customType: 'async-result',
+			content: `<system-notice>\n${jobIds.map((id) => `Background job ${id} has completed.`).join('\n')}\n</system-notice>`,
+			details: {
+				jobs: jobIds.map((jobId) => ({
+					jobId,
+					type: 'bash',
+					label: 'sleep 60 && echo done',
+					durationMs: 60009,
+				})),
+			},
+		},
+		at,
+	);
+}
+
+/** A `hub` result listing jobs it waited on, each with the status it found. */
+export function hubResult(toolCallId: string, jobs: Record<string, string>) {
+	return toolResult(toolCallId, 'hub', {
+		op: 'wait',
+		jobs: Object.entries(jobs).map(([id, status]) => ({ id, type: 'bash', status })),
+	});
+}
+
 export function sessionExit(at?: number) {
 	return entry(
 		'custom',

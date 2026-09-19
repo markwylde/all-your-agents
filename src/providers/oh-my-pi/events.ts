@@ -1,4 +1,5 @@
 import type { SessionStatus, SubagentStatus, TitleSource, TurnFact } from '../../types.ts';
+import { jobChanges } from './journal.ts';
 
 export type OpenTool = { id: string; name: string; executing: boolean };
 
@@ -14,11 +15,16 @@ export type EventsState = {
 	 */
 	awaitingPrompt: boolean;
 	openTools: OpenTool[];
+	/**
+	 * Background bash jobs still running, by job id, with when each was started. They
+	 * outlive the turn that started them, and omp wakes the session when one reports.
+	 */
+	openJobs: Map<string, number | undefined>;
 	model?: string;
 };
 
 export function initialEventsState(): EventsState {
-	return { turnOpen: false, awaitingPrompt: false, openTools: [] };
+	return { turnOpen: false, awaitingPrompt: false, openTools: [], openJobs: new Map() };
 }
 
 export type Entry = {
@@ -94,9 +100,14 @@ export function customOf(
 /**
  * `ask` blocks on the user once it is executing. Permission approvals happen before the
  * assistant message is written, so nothing on disk distinguishes them from a slow model.
+ * A turn that is over with a background job still running waits on that job, not the user.
  */
 export function deriveStatus(state: EventsState): { status: SessionStatus; waitingFor?: string } {
-	if (!state.turnOpen) return { status: 'idle' };
+	if (!state.turnOpen) {
+		return state.openJobs.size > 0
+			? { status: 'waiting', waitingFor: 'shell' }
+			: { status: 'idle' };
+	}
 	if (state.openTools.some((tool) => tool.name === 'ask' && tool.executing)) {
 		return { status: 'waiting', waitingFor: 'ask' };
 	}
@@ -148,12 +159,24 @@ export function endStaleTurn(state: EventsState, processStart: number | undefine
 	return endTurn(state, 'interrupted', processStart);
 }
 
+/** A background job belongs to the process that started it, and died with it. */
+export function dropStaleJobs(state: EventsState, processStart: number | undefined): void {
+	if (processStart == null) return;
+	for (const [id, startedAt] of state.openJobs) {
+		if (startedAt != null && startedAt < processStart) state.openJobs.delete(id);
+	}
+}
+
 /** Apply one transcript entry, in file order. */
 export function reduceRecord(state: EventsState, rec: unknown): TurnFact[] {
 	const entry = entryOf(rec);
 	if (!entry) return [];
 	const { at } = entry;
 	if (at != null) state.lastAt = at;
+
+	const jobs = jobChanges(rec);
+	for (const id of jobs.opened) state.openJobs.set(id, at);
+	for (const id of jobs.closed) state.openJobs.delete(id);
 
 	if (entry.type === 'model_change') {
 		if (typeof entry.row.model === 'string' && entry.row.model) state.model = entry.row.model;
@@ -167,8 +190,11 @@ export function reduceRecord(state: EventsState, rec: unknown): TurnFact[] {
 			if (tool) tool.executing = true;
 			return [];
 		}
-		// Written on the way out. A turn still open then was cut short.
-		if (custom.kind === 'session_exit' && state.turnOpen) return endTurn(state, 'interrupted', at);
+		// Written on the way out. A turn still open then was cut short, and so was every job.
+		if (custom.kind === 'session_exit') {
+			state.openJobs.clear();
+			if (state.turnOpen) return endTurn(state, 'interrupted', at);
+		}
 		return [];
 	}
 

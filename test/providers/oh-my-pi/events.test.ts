@@ -6,13 +6,14 @@ import { fileURLToPath } from 'node:url';
 import {
 	childOutcome,
 	deriveStatus,
+	dropStaleJobs,
 	endStaleTurn,
 	initialEventsState,
 	promptSubmitted,
 	reduceRecord,
 	replayRecords,
 } from '../../../src/providers/oh-my-pi/events.js';
-import { mapRecord } from '../../../src/providers/oh-my-pi/journal.js';
+import { jobChanges, mapRecord } from '../../../src/providers/oh-my-pi/journal.js';
 import {
 	PERSISTED_CUSTOM_TYPES,
 	PERSISTED_ENTRY_TYPES,
@@ -25,7 +26,10 @@ import {
 } from '../../../src/providers/oh-my-pi/persisted-entries.js';
 import {
 	assistant,
+	asyncResult,
+	backgrounded,
 	entry,
+	hubResult,
 	marker,
 	modelChange,
 	role,
@@ -55,6 +59,72 @@ test('status follows the last conversation record, for every stopReason', () => 
 	for (const [records, status] of cases) {
 		assert.equal(deriveStatus(replayRecords(records).state).status, status);
 	}
+});
+
+test('a background job left running makes an ended turn wait on the shell', () => {
+	const job = (id: string) => [
+		assistant('toolUse', [toolCall(`call-${id}`, 'bash')]),
+		backgrounded(`call-${id}`, id),
+	];
+	const asking = [assistant('toolUse', [toolCall('a1', 'ask')]), marker('a1', 'ask')];
+	const cases: [unknown[], ReturnType<typeof deriveStatus>][] = [
+		[[user('hi'), ...job('bg_1')], { status: 'running' }],
+		[[user('hi'), ...job('bg_1'), assistant('stop')], { status: 'waiting', waitingFor: 'shell' }],
+		[
+			[user('hi'), ...job('bg_1'), assistant('aborted', [])],
+			{ status: 'waiting', waitingFor: 'shell' },
+		],
+		// An open turn keeps its own status, whatever runs behind it.
+		[[user('hi'), ...job('bg_1'), ...asking], { status: 'waiting', waitingFor: 'ask' }],
+		[[user('hi'), ...job('bg_1'), assistant('stop'), user('more')], { status: 'running' }],
+		[
+			[user('hi'), ...job('bg_1'), ...job('bg_2'), assistant('stop'), asyncResult(['bg_1'])],
+			{ status: 'waiting', waitingFor: 'shell' },
+		],
+		[
+			[
+				user('hi'),
+				...job('bg_1'),
+				...job('bg_2'),
+				assistant('stop'),
+				asyncResult(['bg_1']),
+				assistant('stop'),
+			],
+			{ status: 'waiting', waitingFor: 'shell' },
+		],
+		[
+			[
+				user('hi'),
+				...job('bg_1'),
+				...job('bg_2'),
+				assistant('stop'),
+				asyncResult(['bg_1']),
+				assistant('stop'),
+				asyncResult(['bg_2']),
+				assistant('stop'),
+			],
+			{ status: 'idle' },
+		],
+		[[user('hi'), ...job('bg_1'), assistant('stop'), asyncResult(['bg_1'])], { status: 'idle' }],
+		[[user('hi'), ...job('bg_1'), assistant('stop'), sessionExit()], { status: 'idle' }],
+	];
+	for (const [records, status] of cases) {
+		assert.deepEqual(deriveStatus(replayRecords(records).state), status);
+	}
+});
+
+test('a job started before the process now on the session is dropped', () => {
+	const { state } = replayRecords([
+		user('x', 1000),
+		assistant('toolUse', [toolCall('c1', 'bash')], {}, 1100),
+		backgrounded('c1', 'bg_1', 1200),
+		assistant('stop', undefined, {}, 1300),
+	]);
+	dropStaleJobs(state, undefined);
+	dropStaleJobs(state, 1200);
+	assert.deepEqual(deriveStatus(state), { status: 'waiting', waitingFor: 'shell' });
+	dropStaleJobs(state, 5000);
+	assert.deepEqual(deriveStatus(state), { status: 'idle' });
 });
 
 test('turn facts: one tool start and finish, keyed by the call id, marker not counted', () => {
@@ -258,6 +328,50 @@ test('mapper: a task result announces its agents once; a later result ends them 
 		mapRecord(waited, state).map((e) => e.kind),
 		['tool-result'],
 	);
+});
+
+test('mapper: background bash jobs open and close; a task agent is not one', () => {
+	assert.deepEqual(jobChanges(backgrounded('call-1', 'bg_1')), { opened: ['bg_1'], closed: [] });
+	assert.deepEqual(jobChanges(asyncResult(['bg_3'])), { opened: [], closed: ['bg_3'] });
+	assert.deepEqual(jobChanges(hubResult('call-2', { bg_1: 'completed', bg_2: 'failed' })), {
+		opened: [],
+		closed: ['bg_1', 'bg_2'],
+	});
+	// Still running when `hub` looked: not the end of it.
+	assert.deepEqual(jobChanges(hubResult('call-3', { bg_1: 'running' })), {
+		opened: [],
+		closed: [],
+	});
+	const task = toolResult('c1', 'task', {
+		progress: [{ id: 'PowTwoTen', agent: 'sonic', status: 'pending' }],
+		async: { state: 'running', jobId: 'PowTwoTen', type: 'task' },
+	});
+	assert.deepEqual(jobChanges(task).opened, []);
+	// A bash result that ran to its end, and one whose job is already over, open nothing.
+	assert.deepEqual(jobChanges(toolResult('c2', 'bash', { timeoutSeconds: 120 })).opened, []);
+	const done = toolResult('c3', 'bash', {
+		async: { state: 'completed', jobId: 'bg_9', type: 'bash' },
+	});
+	assert.deepEqual(jobChanges(done).opened, []);
+	for (const rec of [user('hi'), assistant('stop'), sessionExit(), 'not an object']) {
+		assert.deepEqual(jobChanges(rec), { opened: [], closed: [] });
+	}
+
+	const state = initialEventsState();
+	replayRecords([user('x'), assistant('toolUse', [toolCall('call-1', 'bash')])], state);
+	reduceRecord(state, backgrounded('call-1', 'bg_1'));
+	reduceRecord(state, task);
+	assert.deepEqual([...state.openJobs.keys()], ['bg_1']);
+	reduceRecord(state, hubResult('call-3', { bg_1: 'running' }));
+	assert.equal(state.openJobs.size, 1);
+	reduceRecord(state, hubResult('call-2', { bg_1: 'completed' }));
+	assert.equal(state.openJobs.size, 0);
+	reduceRecord(state, backgrounded('call-4', 'bg_2'));
+	reduceRecord(state, asyncResult(['bg_2']));
+	assert.equal(state.openJobs.size, 0);
+	reduceRecord(state, backgrounded('call-5', 'bg_3'));
+	reduceRecord(state, sessionExit());
+	assert.equal(state.openJobs.size, 0);
 });
 
 test('compat: everything the reducer acts on is something omp persists', () => {

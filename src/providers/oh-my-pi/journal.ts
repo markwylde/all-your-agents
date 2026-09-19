@@ -99,9 +99,44 @@ export function reportedOutcomes(rec: unknown): { id: string; status: Ended }[] 
 	const d = details as Record<string, unknown>;
 	for (const row of [...rows(d.results), ...rows(d.jobs)]) {
 		const status = endedStatus(row.status);
-		if (typeof row.id === 'string' && row.id && status) out.push({ id: row.id, status });
+		const id = jobIdOf(row);
+		if (id && status) out.push({ id, status });
 	}
 	return out;
+}
+
+/** A job row names itself `id` in a tool result and `jobId` in an `async-result` note. */
+function jobIdOf(row: Record<string, unknown>): string | undefined {
+	for (const id of [row.id, row.jobId]) if (typeof id === 'string' && id) return id;
+	return undefined;
+}
+
+/**
+ * Background bash jobs a root transcript entry starts and ends. A `bash` result that was
+ * backgrounded (`details.async`, still `running`) opens one; the `async-result` note that
+ * delivers its output, or a result listing it with a final status, closes it. A job of
+ * type `task` is a subagent and is none of this. Closed ids may name jobs never opened.
+ */
+export function jobChanges(rec: unknown): { opened: string[]; closed: string[] } {
+	const entry = entryOf(rec);
+	const opened: string[] = [];
+	if (!entry) return { opened, closed: [] };
+	if (entry.type === 'custom_message') {
+		if (entry.row.customType !== 'async-result') return { opened, closed: [] };
+		const details = entry.row.details as Record<string, unknown> | undefined;
+		const closed = rows(details?.jobs)
+			.map(jobIdOf)
+			.filter((id): id is string => id != null);
+		return { opened, closed };
+	}
+	if (entry.message?.role !== 'toolResult') return { opened, closed: [] };
+	const details = entry.message.details as Record<string, unknown> | undefined;
+	const job = details?.async as Record<string, unknown> | undefined;
+	if (job && typeof job === 'object' && job.state === 'running' && job.type === 'bash') {
+		const id = jobIdOf(job);
+		if (id) opened.push(id);
+	}
+	return { opened, closed: reportedOutcomes(rec).map((outcome) => outcome.id) };
 }
 
 /** Ids of the agents a `task` result spawned in the background (`details.async`). */
