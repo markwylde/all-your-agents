@@ -4,14 +4,9 @@ Watch every coding agent on this machine, and inspect the sessions they leave be
 
 ## Compatibility
 
-| Agent | Live detection | Status | Waiting for | Titles | Model | Tools | Turn outcome | Subagents | Transcript | History | Print mode |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Claude Code | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ¹ |
-| Grok Build | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ² | 🟠 ³ | 🟢 | 🟢 | 🟢 | 🟠 ⁴ |
-| Codex CLI | 🟢 | 🟢 | 🔴 ⁵ | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
-| oh-my-pi | 🟢 | 🟢 ⁶ | 🟠 ⁷ | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟠 ⁸ |
+<img src="docs/images/compatibility.svg" alt="Compatibility matrix. Every agent fully supports live detection, status, titles, model, subagents, transcript and history. Partial: Grok Build tools and turn outcome; oh-my-pi waiting-for; print mode on Claude Code, Grok Build and oh-my-pi. None: Codex CLI waiting-for." width="720">
 
-🟢 full · 🟠 partial · 🔴 none. Subagents covers start, end, background and nested.
+Subagents covers start, end, background and nested.
 
 1. `claude -p` writes no live index entry, so a print-mode run appears in history only.
 2. Grok's `tool_started` carries no call id, so the current tool is identified by name. Two tools with the same name running at once show as one.

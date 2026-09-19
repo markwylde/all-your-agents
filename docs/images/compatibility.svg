@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="674" height="498" viewBox="0 0 674 498" role="img" aria-labelledby="t">
+<title id="t">Compatibility of each agent with each all-your-agents feature</title>
+<style>
+  svg { --bg:#ffffff; --fg:#1f2328; --muted:#59636e; --line:#d1d9e0; --band:#f6f8fa; --head:#f6f8fa;
+        --full:#1a7f37; --part:#bf8700; --none:#cf222e; }
+  @media (prefers-color-scheme: dark) {
+    svg { --bg:#0d1117; --fg:#e6edf3; --muted:#9198a1; --line:#3d444d; --band:#151b23; --head:#151b23;
+          --full:#3fb950; --part:#d29922; --none:#f85149; }
+  }
+  text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; fill: var(--fg); }
+  .agent { font-size: 13px; font-weight: 600; }
+  .feat { font-size: 13px; }
+  .note { font-size: 10px; font-weight: 600; fill: var(--muted); }
+  .legend { font-size: 12px; fill: var(--muted); }
+  .card { fill: var(--bg); stroke: var(--line); }
+  .rule { stroke: var(--line); }
+  .band { fill: var(--band); }
+  .head { fill: var(--head); }
+  .full { fill: var(--full); }
+  .part { fill: var(--part); }
+  .part-ring { fill: none; stroke: var(--part); stroke-width: 1.5; }
+  .none { fill: none; stroke: var(--none); stroke-width: 1.5; }
+</style>
+<g transform="translate(1 1)">
+<rect class="card" width="672" height="496" rx="6"/>
+<clipPath id="c"><rect width="672" height="496" rx="6"/></clipPath>
+<g clip-path="url(#c)">
+<rect class="head" width="672" height="52"/>
+<rect class="band" y="88" width="672" height="36"/>
+<rect class="band" y="160" width="672" height="36"/>
+<rect class="band" y="232" width="672" height="36"/>
+<rect class="band" y="304" width="672" height="36"/>
+<rect class="band" y="376" width="672" height="36"/>
+</g>
+<line class="rule" x1="0" x2="672" y1="52" y2="52"/>
+<line class="rule" x1="0" x2="672" y1="448" y2="448"/>
+<rect class="card" style="fill:none" width="672" height="496" rx="6"/>
+<text class="agent" x="238" y="30.5" text-anchor="middle">Claude Code</text>
+<text class="agent" x="362" y="30.5" text-anchor="middle">Grok Build</text>
+<text class="agent" x="486" y="30.5" text-anchor="middle">Codex CLI</text>
+<text class="agent" x="610" y="30.5" text-anchor="middle">oh-my-pi</text>
+<text class="feat" x="16" y="74.5">Live detection</text>
+<circle class="full" cx="238" cy="70" r="6.5"/>
+<circle class="full" cx="362" cy="70" r="6.5"/>
+<circle class="full" cx="486" cy="70" r="6.5"/>
+<circle class="full" cx="610" cy="70" r="6.5"/>
+<text class="feat" x="16" y="110.5">Status</text>
+<circle class="full" cx="238" cy="106" r="6.5"/>
+<circle class="full" cx="362" cy="106" r="6.5"/>
+<circle class="full" cx="486" cy="106" r="6.5"/>
+<circle class="full" cx="610" cy="106" r="6.5"/>
+<text class="note" x="620.5" y="104">6</text>
+<text class="feat" x="16" y="146.5">Waiting for</text>
+<circle class="full" cx="238" cy="142" r="6.5"/>
+<circle class="full" cx="362" cy="142" r="6.5"/>
+<circle class="none" cx="486" cy="142" r="5.75"/>
+<text class="note" x="496.5" y="140">5</text>
+<circle class="part-ring" cx="610" cy="142" r="5.75"/><path class="part" d="M610 135.5A6.5 6.5 0 0 0 610 148.5Z"/>
+<text class="note" x="620.5" y="140">7</text>
+<text class="feat" x="16" y="182.5">Titles</text>
+<circle class="full" cx="238" cy="178" r="6.5"/>
+<circle class="full" cx="362" cy="178" r="6.5"/>
+<circle class="full" cx="486" cy="178" r="6.5"/>
+<circle class="full" cx="610" cy="178" r="6.5"/>
+<text class="feat" x="16" y="218.5">Model</text>
+<circle class="full" cx="238" cy="214" r="6.5"/>
+<circle class="full" cx="362" cy="214" r="6.5"/>
+<circle class="full" cx="486" cy="214" r="6.5"/>
+<circle class="full" cx="610" cy="214" r="6.5"/>
+<text class="feat" x="16" y="254.5">Tools</text>
+<circle class="full" cx="238" cy="250" r="6.5"/>
+<circle class="part-ring" cx="362" cy="250" r="5.75"/><path class="part" d="M362 243.5A6.5 6.5 0 0 0 362 256.5Z"/>
+<text class="note" x="372.5" y="248">2</text>
+<circle class="full" cx="486" cy="250" r="6.5"/>
+<circle class="full" cx="610" cy="250" r="6.5"/>
+<text class="feat" x="16" y="290.5">Turn outcome</text>
+<circle class="full" cx="238" cy="286" r="6.5"/>
+<circle class="part-ring" cx="362" cy="286" r="5.75"/><path class="part" d="M362 279.5A6.5 6.5 0 0 0 362 292.5Z"/>
+<text class="note" x="372.5" y="284">3</text>
+<circle class="full" cx="486" cy="286" r="6.5"/>
+<circle class="full" cx="610" cy="286" r="6.5"/>
+<text class="feat" x="16" y="326.5">Subagents</text>
+<circle class="full" cx="238" cy="322" r="6.5"/>
+<circle class="full" cx="362" cy="322" r="6.5"/>
+<circle class="full" cx="486" cy="322" r="6.5"/>
+<circle class="full" cx="610" cy="322" r="6.5"/>
+<text class="feat" x="16" y="362.5">Transcript</text>
+<circle class="full" cx="238" cy="358" r="6.5"/>
+<circle class="full" cx="362" cy="358" r="6.5"/>
+<circle class="full" cx="486" cy="358" r="6.5"/>
+<circle class="full" cx="610" cy="358" r="6.5"/>
+<text class="feat" x="16" y="398.5">History</text>
+<circle class="full" cx="238" cy="394" r="6.5"/>
+<circle class="full" cx="362" cy="394" r="6.5"/>
+<circle class="full" cx="486" cy="394" r="6.5"/>
+<circle class="full" cx="610" cy="394" r="6.5"/>
+<text class="feat" x="16" y="434.5">Print mode</text>
+<circle class="part-ring" cx="238" cy="430" r="5.75"/><path class="part" d="M238 423.5A6.5 6.5 0 0 0 238 436.5Z"/>
+<text class="note" x="248.5" y="428">1</text>
+<circle class="part-ring" cx="362" cy="430" r="5.75"/><path class="part" d="M362 423.5A6.5 6.5 0 0 0 362 436.5Z"/>
+<text class="note" x="372.5" y="428">4</text>
+<circle class="full" cx="486" cy="430" r="6.5"/>
+<circle class="part-ring" cx="610" cy="430" r="5.75"/><path class="part" d="M610 423.5A6.5 6.5 0 0 0 610 436.5Z"/>
+<text class="note" x="620.5" y="428">8</text>
+<circle class="full" cx="22.5" cy="472" r="6.5"/>
+<text class="legend" x="36" y="476">Full</text>
+<circle class="part-ring" cx="82.5" cy="472" r="5.75"/><path class="part" d="M82.5 465.5A6.5 6.5 0 0 0 82.5 478.5Z"/>
+<text class="legend" x="96" y="476">Partial</text>
+<circle class="none" cx="158.5" cy="472" r="5.75"/>
+<text class="legend" x="172" y="476">None</text>
+<text class="legend" x="656" y="476" text-anchor="end">Numbers refer to the notes below.</text>
+</g></svg>
