@@ -16,6 +16,11 @@ import { listSessions } from '../../../src/providers/grok-build/list.js';
 import { grokBuild } from '../../../src/providers/grok-build/provider.js';
 import { knownPhases } from '../../../src/providers/grok-build/status.js';
 import { parseMeta } from '../../../src/providers/grok-build/subagents.js';
+import {
+	applyUpdateLines,
+	backgroundWait,
+	type TaskMap,
+} from '../../../src/providers/grok-build/updates.js';
 import { fakeProcesses, sessionDir } from './home.js';
 
 const dir = join(
@@ -130,4 +135,40 @@ test('compat: the captured index has only the allowed fields', () => {
 	assert.ok(index.length > 0);
 	for (const entry of index)
 		assert.deepEqual(Object.keys(entry).sort(), [...allowedIndexFields].sort());
+});
+
+test('compat: every captured updates.jsonl row is handled without a failure', () => {
+	const rows = read('background/updates.jsonl').trim().split('\n');
+	const kinds = new Set(
+		rows.map((l) => {
+			const row = JSON.parse(l) as {
+				method: string;
+				params: { update: { sessionUpdate: string } };
+			};
+			return `${row.method} ${row.params.update.sessionUpdate}`;
+		}),
+	);
+	for (const kind of [
+		'task_backgrounded',
+		'background_tasks',
+		'task_completed',
+		'turn_completed',
+	]) {
+		assert.ok(kinds.has(`_x.ai/session/update ${kind}`), kind);
+	}
+	assert.ok(kinds.has('session/update agent_message_chunk'));
+	const tasks: TaskMap = new Map();
+	const failures: unknown[] = [];
+	const waits = rows.map((row) => {
+		applyUpdateLines(tasks, `${row}\n`, (e) => failures.push(e));
+		return backgroundWait(tasks);
+	});
+	assert.deepEqual(failures, []);
+	// Running from its first snapshot until its completion row.
+	const from = waits.indexOf('monitor');
+	const to = waits.lastIndexOf('monitor');
+	assert.ok(from >= 0 && to > from);
+	assert.ok(waits.slice(from, to + 1).every((w) => w === 'monitor'));
+	assert.match(rows[to + 1] ?? '', /task_completed/);
+	assert.deepEqual([...tasks.values()], [{ kind: 'monitor', status: 'failed' }]);
 });

@@ -32,6 +32,7 @@ export async function makeSession(
 		summary?: Record<string, unknown>;
 		events?: unknown[];
 		chat?: unknown[];
+		updates?: unknown[];
 	} = {},
 ): Promise<string> {
 	const dir = sessionDir(home, cwd, id);
@@ -44,6 +45,7 @@ export async function makeSession(
 	}
 	if (files.events) await appendLines(join(dir, 'events.jsonl'), files.events);
 	if (files.chat) await appendLines(join(dir, 'chat_history.jsonl'), files.chat);
+	if (files.updates) await appendLines(join(dir, 'updates.jsonl'), files.updates);
 	return dir;
 }
 
@@ -69,4 +71,31 @@ export const user = (text: string, promptIndex: number) => ({
 	type: 'user',
 	content: [{ type: 'text', text: `<user_query>\n${text}\n</user_query>` }],
 	prompt_index: promptIndex,
+});
+
+/** One of Grok's own `updates.jsonl` rows. */
+export const updateRow = (update: Record<string, unknown>) => ({
+	timestamp: 1789856107,
+	method: '_x.ai/session/update',
+	params: { sessionId: 's', update },
+});
+
+/** A `background_tasks` snapshot: `[task_id, kind, status]` per task. */
+export const tasksRow = (...tasks: [id: string, kind: string, status: string][]) =>
+	updateRow({
+		sessionUpdate: 'background_tasks',
+		tasks: tasks.map(([task_id, kind, status]) => ({ task_id, kind, status })),
+	});
+
+export const taskCompletedRow = (id: string, exitCode = 0) =>
+	updateRow({
+		sessionUpdate: 'task_completed',
+		task_snapshot: { task_id: id, exit_code: exitCode },
+	});
+
+/** A streamed chunk row: most of what `updates.jsonl` holds. */
+export const chunkRow = (sessionUpdate: string, text = 'x') => ({
+	timestamp: 1789856107,
+	method: 'session/update',
+	params: { sessionId: 's', update: { sessionUpdate, content: { type: 'text', text } } },
 });

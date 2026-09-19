@@ -51,6 +51,11 @@ export function sessionsDir(home: string): string {
 	return join(home, 'sessions');
 }
 
+/** A session's streamed updates. Only its background task rows are read. */
+export function updatesPath(sessionDir: string): string {
+	return join(sessionDir, 'updates.jsonl');
+}
+
 /**
  * Where Grok puts a session for this cwd, or undefined when the encoded cwd is too long
  * to be the directory name (Grok then uses a slug and a blake3 hash, found by lookup).

@@ -17,8 +17,16 @@ import {
 } from './journal.ts';
 import { isSubagentKind, listSessions, readSummary, type Summary } from './list.ts';
 import { followRewinds, type Rewind, recentRewinds } from './log.ts';
-import { derivedSessionDir, grokHome, indexPath, logPath, type PathOptions } from './paths.ts';
+import {
+	derivedSessionDir,
+	grokHome,
+	indexPath,
+	logPath,
+	type PathOptions,
+	updatesPath,
+} from './paths.ts';
 import { META_MAX_BYTES, parseMeta, parseSpawnResult, type SubagentMeta } from './subagents.ts';
+import { followUpdates } from './updates.ts';
 
 type Tail = AsyncIterable<unknown> & { close(): void };
 
@@ -68,6 +76,10 @@ type Bound = {
 	/** The index moved it to a cwd whose directory has not appeared yet. */
 	relocating: boolean;
 	closes: Map<string, () => void>;
+	/** Looks at `updates.jsonl` now, so a turn's end is settled against its latest tasks. */
+	readUpdates?: () => Promise<void>;
+	/** A turn ended since status was last settled: its foreground subagents are over. */
+	turnClosed?: boolean;
 	statusFlush?: ReturnType<typeof setImmediate>;
 	/** Torn down. Work that was awaiting when that happened must not attach anything. */
 	released: boolean;
@@ -174,6 +186,7 @@ export function grokBuild(options: PathOptions = {}): Provider {
 	const detachFiles = (bound: Bound): void => {
 		for (const close of bound.closes.values()) close();
 		bound.closes.clear();
+		bound.readUpdates = undefined;
 	};
 
 	const teardown = (bound: Bound): void => {
@@ -246,11 +259,19 @@ export function grokBuild(options: PathOptions = {}): Provider {
 	const applyStatus = (bound: Bound): void => {
 		if (!ctx || bound.released) return;
 		const next = deriveStatus(bound.events);
-		if (next.status === bound.status && next.waitingFor === bound.waitingFor) return;
-		bound.status = next.status;
-		bound.waitingFor = next.waitingFor;
-		ctx.emit('session:status', { id: bound.id, status: next.status, waitingFor: next.waitingFor });
-		if (next.status === 'idle') endForeground(bound);
+		if (next.status !== bound.status || next.waitingFor !== bound.waitingFor) {
+			bound.status = next.status;
+			bound.waitingFor = next.waitingFor;
+			ctx.emit('session:status', {
+				id: bound.id,
+				status: next.status,
+				waitingFor: next.waitingFor,
+			});
+		}
+		// The turn closing ends them, whether it leaves the session idle or waiting.
+		const turnClosed = bound.turnClosed;
+		bound.turnClosed = false;
+		if (turnClosed && !bound.events.turnOpen) endForeground(bound);
 	};
 
 	/**
@@ -273,8 +294,14 @@ export function grokBuild(options: PathOptions = {}): Provider {
 		if (row?.type === 'turn_started') reportModel(bound, bound.events.model);
 		for (const fact of facts) {
 			ctx.emit('turn', { sessionId: bound.id, ...withError(fact, bound.chatError) });
+			if (fact.type === 'turn-ended') bound.turnClosed = true;
 		}
-		scheduleStatus(bound);
+		if (bound.events.turnOpen || !bound.readUpdates) {
+			scheduleStatus(bound);
+			return;
+		}
+		// No turn open: status depends on the tasks, and their file is read less eagerly.
+		void bound.readUpdates().then(() => scheduleStatus(bound));
 	};
 
 	/**
@@ -330,7 +357,7 @@ export function grokBuild(options: PathOptions = {}): Provider {
 	/** Report what a bind found: running ones are caught up, finished ones seeded. */
 	const reportSeeded = (bound: Bound): void => {
 		if (!ctx) return;
-		const idle = deriveStatus(bound.events).status === 'idle';
+		const idle = !bound.events.turnOpen;
 		for (const agent of bound.agents.values()) {
 			if (agent.reported) continue;
 			if (agent.facts.status === 'running' && idle && !agent.facts.background) {
@@ -641,11 +668,24 @@ export function grokBuild(options: PathOptions = {}): Provider {
 			if (change.type === 'change') void refreshSummary(bound, dir);
 		});
 		bound.closes.set('summary', () => summary.close());
+		// Tasks found by the first read seed the status below; later ones are live.
+		let seeding = seed;
+		bound.events.tasks = new Map();
+		const updates = followUpdates(
+			ctx,
+			updatesPath(dir),
+			() => bound.events.tasks,
+			() => {
+				if (!seeding) scheduleStatus(bound);
+			},
+		);
+		bound.closes.set('updates', () => updates.close());
+		bound.readUpdates = updates.read;
 		if (seed) {
 			let chat: unknown[] = [];
 			let events: unknown[] = [];
 			try {
-				[chat, events] = await Promise.all([chatTail.backlog, eventsTail.backlog]);
+				[chat, events] = await Promise.all([chatTail.backlog, eventsTail.backlog, updates.read()]);
 			} catch (error) {
 				if (!bound.released) ctx?.reportError(error);
 			}
@@ -658,7 +698,9 @@ export function grokBuild(options: PathOptions = {}): Provider {
 					ctx.reportError(error);
 				}
 			}
+			seeding = false;
 			const replay = replayEvents(events, bound.chatError);
+			replay.state.tasks = bound.events.tasks;
 			bound.events = replay.state;
 			reportModel(bound, replay.state.model);
 			ctx.emit('activity:replay', { id: bound.id, facts: replay.facts });

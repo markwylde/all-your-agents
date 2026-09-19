@@ -7,6 +7,8 @@ import {
 	reduceEvent,
 } from '../../../src/providers/grok-build/events.js';
 import { phaseStatus } from '../../../src/providers/grok-build/status.js';
+import { applyTaskUpdate, parseUpdateLine } from '../../../src/providers/grok-build/updates.js';
+import { tasksRow } from './home.js';
 
 const phase = (p: string) => ({ type: 'phase_changed', phase: p });
 
@@ -61,6 +63,49 @@ test('status from events', () => {
 			{ type: 'mcp_init_completed' },
 		]),
 		{ status: 'idle' },
+	);
+	// Background tasks count only once no turn is open.
+	const withTasks = (records: unknown[], ...tasks: [string, string, string][]) => {
+		const { state } = replayEvents(records);
+		const update = parseUpdateLine(JSON.stringify(tasksRow(...tasks)));
+		assert.ok(update);
+		applyTaskUpdate(state.tasks, update);
+		return deriveStatus(state);
+	};
+	const over = [{ type: 'turn_started' }, { type: 'turn_ended', outcome: 'completed' }];
+	assert.deepEqual(withTasks(over, ['t1', 'monitor', 'running']), {
+		status: 'waiting',
+		waitingFor: 'monitor',
+	});
+	assert.deepEqual(withTasks(over, ['t1', 'bash', 'running']), {
+		status: 'waiting',
+		waitingFor: 'shell',
+	});
+	assert.deepEqual(withTasks(over, ['t1', 'bash', 'running'], ['t2', 'monitor', 'running']), {
+		status: 'waiting',
+		waitingFor: 'monitor',
+	});
+	assert.deepEqual(withTasks([], ['t1', 'bash', 'running']), {
+		status: 'waiting',
+		waitingFor: 'shell',
+	});
+	assert.deepEqual(withTasks(over, ['t1', 'bash', 'completed'], ['t2', 'monitor', 'failed']), {
+		status: 'idle',
+	});
+	assert.deepEqual(
+		withTasks([{ type: 'turn_started' }, phase('streaming_text')], ['t1', 'monitor', 'running']),
+		{ status: 'running' },
+	);
+	assert.deepEqual(
+		withTasks(
+			[
+				{ type: 'turn_started' },
+				phase('permission_prompt'),
+				{ type: 'permission_requested', tool_name: 'run_terminal_command' },
+			],
+			['t1', 'monitor', 'running'],
+		),
+		{ status: 'waiting', waitingFor: 'run_terminal_command' },
 	);
 });
 
