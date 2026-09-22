@@ -190,7 +190,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 	const EPOLLIN = 0x001;
 	const EPOLL_CTL_ADD = 1;
 	const EPOLL_CTL_DEL = 2;
-	const SYS_pidfd_open = process.arch === 'arm64' ? 438 : 434;
+	const SYS_pidfd_open = 434;
 
 	const lib = koffi.load('libc.so.6');
 	const syscall = lib.func('long syscall(long n, ...)');
