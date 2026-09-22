@@ -199,7 +199,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 		pidfdOpen = lib.func('int pidfd_open(int pid, unsigned int flags)');
 	} catch {
 		pidfdOpen = (pid, flags) => {
-			const fd = Number(syscall(SYS_pidfd_open, pid, flags));
+			const fd = Number(syscall(SYS_pidfd_open, 'int', pid, 'unsigned int', flags));
 			return !Number.isFinite(fd) || fd > 0x7fffffff ? -1 : fd;
 		};
 	}
