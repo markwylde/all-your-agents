@@ -5,9 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { createLocalProcesses } from '../../src/helpers/processes.js';
 import { createLocalSqlite } from '../../src/helpers/sqlite.js';
-import type { SqliteRow } from '../../src/helpers/types.js';
 import { sqliteWriter } from '../util/sqlite-writer.js';
-import { sleep } from '../util/wait.js';
 
 /** A long-lived writer, like a harness holding its database open in WAL mode. */
 function writer(db: string) {
@@ -25,13 +23,8 @@ test('reads rows committed by a process that holds the database open in WAL mode
 	const w = writer(db);
 	const procs = createLocalProcesses({ koffi: false });
 	try {
-		w.run(`insert into t(v) values('one');`);
-		let rows: SqliteRow[] = [];
-		const started = Date.now();
-		while (Date.now() - started < 3000 && rows.length === 0) {
-			rows = await sqlite.query(db, 'select id, v from t where id > ?', [0]).catch(() => []);
-			if (rows.length === 0) await sleep(30);
-		}
+		await w.run(`insert into t(v) values('one');`);
+		const rows = await sqlite.query(db, 'select id, v from t where id > ?', [0]);
 		assert.deepEqual({ ...rows[0] }, { id: 1, v: 'one' });
 		// Our read did not block the writer, and we hold nothing afterwards.
 		await w.run(`insert into t(v) values('two');`);
