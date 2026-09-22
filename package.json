@@ -28,8 +28,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
-    "test": "tsc -p tsconfig.json && tsc -p tsconfig.test.json && tsc -p tsconfig.types.json && node --test --test-force-exit --test-timeout=60000 $(find dist-test/test -name '*.test.js')",
-    "test:system": "tsc -p tsconfig.json && tsc -p tsconfig.test.json && node --test --test-force-exit --test-timeout=60000 $(find dist-test/test/helpers -name '*.test.js')",
+    "test": "tsc -p tsconfig.json && tsc -p tsconfig.test.json && tsc -p tsconfig.types.json && node scripts/run-tests.mjs $(find dist-test/test -name '*.test.js')",
+    "test:system": "tsc -p tsconfig.json && tsc -p tsconfig.test.json && node scripts/run-tests.mjs $(find dist-test/test/helpers -name '*.test.js')",
     "test:coverage": "tsc -p tsconfig.json && tsc -p tsconfig.test.json && tsc -p tsconfig.types.json && c8 --src src --all --exclude src/testing/** --exclude src/helpers/process-watch-worker.ts --reporter=text --reporter=text-summary --reporter=html node --test $(find dist-test/test -name '*.test.js')",
     "test:e2e": "tsc -p tsconfig.test.json && node scripts/run-e2e.mjs",
     "lint": "biome check . && node scripts/check-no-interval.mjs"
