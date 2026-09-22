@@ -4,11 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createLocalFs } from '../../src/helpers/fs.js';
+import { createLocalSqlite } from '../../src/helpers/sqlite.js';
 import { watchFile } from '../../src/helpers/watch-file.js';
 import { sqliteWriter } from '../util/sqlite-writer.js';
 import { sleep, waitFor } from '../util/wait.js';
 
-test('heldOpen reports commits to a WAL that another process keeps open', async () => {
+test('heldOpen reports commits to a WAL that another process keeps open', async (t) => {
+	if (!(await createLocalSqlite())) return t.skip('this Node has no built-in SQLite');
 	const dir = await mkdtemp(join(tmpdir(), 'aya-file-held-'));
 	const db = join(dir, 'h.db');
 	const child = sqliteWriter(db);

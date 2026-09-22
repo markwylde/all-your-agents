@@ -8,7 +8,12 @@ import { fileURLToPath } from 'node:url';
 import { installTimerGuard } from '../../src/helpers/no-timers.js';
 import { createLocalProcesses } from '../../src/helpers/processes.js';
 
-test('tty names the terminal of a child on a pty, and nothing for a piped or dead one', async () => {
+test('tty names the terminal of a child on a pty, and nothing for a piped or dead one', async (t) => {
+	try {
+		execFileSync('sh', ['-c', 'command -v script && command -v pgrep'], { stdio: 'ignore' });
+	} catch {
+		return t.skip('needs script and pgrep');
+	}
 	const args =
 		platform() === 'darwin' ? ['-q', '/dev/null', 'sleep', '30'] : ['-qc', 'sleep 30', '/dev/null'];
 	// `script` refuses a socket for stdin, so it gets none.

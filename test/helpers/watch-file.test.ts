@@ -50,6 +50,8 @@ test('watchFile keeps reporting tmp-then-rename rewrites and ignores siblings', 
 		await writeFile(join(dir, 'index.json.tmp'), '[1,2]');
 		await rename(join(dir, 'index.json.tmp'), path);
 		await waitFor(() => changes > afterFirst);
+		// FSEvents can repeat a rename a beat later; let it settle before the sibling write.
+		await sleep(200);
 		const afterSecond = changes;
 		await writeFile(join(dir, 'other.json'), '{}');
 		await sleep(100);
