@@ -12,7 +12,7 @@ import { sleep } from '../util/wait.js';
 /** A long-lived writer, like a harness holding its database open in WAL mode. */
 function writer(db: string) {
 	const child = sqliteWriter(db);
-	const run = (sql: string) => child.stdin.write(`${sql}\n`);
+	const run = (sql: string) => child.run(sql);
 	run('pragma journal_mode=wal; create table t(id integer primary key, v text);');
 	return { child, run };
 }
@@ -34,8 +34,7 @@ test('reads rows committed by a process that holds the database open in WAL mode
 		}
 		assert.deepEqual({ ...rows[0] }, { id: 1, v: 'one' });
 		// Our read did not block the writer, and we hold nothing afterwards.
-		w.run(`insert into t(v) values('two');`);
-		await sleep(200);
+		await w.run(`insert into t(v) values('two');`);
 		const again = await sqlite.query(db, 'select v from t order by id');
 		assert.deepEqual(
 			again.map((row) => row.v),
