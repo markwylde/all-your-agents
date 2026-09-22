@@ -49,15 +49,21 @@ function observe(home: string, procs: Procs, fs?: Fs) {
 
 const childId = (n: number) => `00000000-0000-4000-9000-00000000000${n}`;
 
-function child(parentSession: string, n: number, agent = 'sonic') {
+function child(parentSession: string, n: number, agent = 'sonic', at?: number) {
 	return [
 		slot(),
-		header(childId(n), { parentSession }),
+		header(childId(n), { parentSession }, at),
 		entry('model_change', { model: 'xai-oauth/grok-4.6' }),
 		entry('session_init', { agent, task: 'Compute it', tools: ['read'] }),
 		user('Compute it'),
 	];
 }
+
+/**
+ * Seen live, a session may still be binding, and a child stamped in the very millisecond the
+ * bind began counts as already there. One stamped a millisecond on was born after it.
+ */
+const afterBind = () => Date.now() + 1;
 
 const yielded = (name: string, status = 'success') => [
 	assistant('toolUse', [toolCall(`y-${name}`, 'yield')]),
@@ -80,7 +86,7 @@ test('three parallel subagents start with their type and end completed; other fi
 		const dir = artifacts(path);
 		const names = ['PowTwoTen', 'MulSeventeenTwentyThree', 'DivOneFortyFour'];
 		for (const [i, name] of names.entries())
-			await writeTranscript(join(dir, `${name}.jsonl`), child(path, i + 1));
+			await writeTranscript(join(dir, `${name}.jsonl`), child(path, i + 1, 'sonic', afterBind()));
 		await writeFile(join(dir, '0.bash.log'), 'log');
 		await writeFile(join(dir, 'PowTwoTen.md'), 'result');
 		await writeFile(join(dir, 'PowTwoTen.json'), '{}');
@@ -114,7 +120,7 @@ test('background: a child outlives the turn; nested: its parent is the subagent 
 		await waitFor(() => live(A));
 		const dir = artifacts(path);
 		const outer = join(dir, 'ScoutCode.jsonl');
-		await writeTranscript(outer, child(path, 1, 'scout'));
+		await writeTranscript(outer, child(path, 1, 'scout', afterBind()));
 		await waitFor(() => events.includes('start:ScoutCode:scout::fg'));
 		await writeTranscript(
 			join(dir, 'ScoutCode', 'ScoutCode.Inner.jsonl'),
@@ -157,7 +163,7 @@ test('background: a child outlives a turn that ends waiting on a shell job, as i
 		});
 		await waitFor(() => live(A));
 		const outer = join(artifacts(path), 'ScoutCode.jsonl');
-		await writeTranscript(outer, child(path, 1, 'scout'));
+		await writeTranscript(outer, child(path, 1, 'scout', afterBind()));
 		await waitFor(() => events.includes('start:ScoutCode:scout::fg'));
 
 		await appendTranscript(path, [

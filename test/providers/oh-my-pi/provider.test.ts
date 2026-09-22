@@ -6,6 +6,7 @@ import { createLocalFs } from '../../../src/helpers/fs.js';
 import type { Fs } from '../../../src/helpers/types.js';
 import { AllYourAgents } from '../../../src/index.js';
 import { ohMyPi } from '../../../src/providers/oh-my-pi/index.js';
+import { spyFs } from '../../util/spy-fs.js';
 import { sleep, waitFor } from '../../util/wait.js';
 import {
 	A,
@@ -245,11 +246,19 @@ test('no process events: a death is found on the next registry event, or by reco
 	await withHome(async (home) => {
 		const procs = fakeOmpProcesses();
 		procs.unsupported();
-		const { aya, events, live } = observe(home, procs);
+		const fs = spyFs();
+		let touched = Date.now();
+		fs.hooks.stat = fs.hooks.readDir = () => {
+			touched = Date.now();
+		};
+		const { aya, events, live } = observe(home, procs, { fs });
 		await aya.start();
 		await launch(home, procs, { id: A, pid: 80, terminal: 'ttys080', records: [] });
 		await launch(home, procs, { id: B, pid: 81, terminal: 'ttys081', records: [] });
 		await waitFor(() => live(A) && live(B));
+		// Binding B opens watches, and after each one every watch looks again at what it covers,
+		// which may find a registry change it was not told about. Let that finish first.
+		await waitFor(() => Date.now() - touched > 100);
 		procs.kill(80);
 		await sleep(80);
 		assert.ok(live(A), 'nothing re-checks a pid on a clock');

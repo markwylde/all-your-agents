@@ -218,6 +218,8 @@ test('child file before parent binds is linked once the parent appears', async (
 			processes: procs,
 			debounce: { quietMs: 10 },
 		});
+		const starts: string[] = [];
+		aya.on('subagent:start', (s) => starts.push(s.id));
 		await aya.start();
 		const child = rolloutPath(home, B);
 		await writeRollout(child, [
@@ -246,6 +248,7 @@ test('child file before parent binds is linked once the parent appears', async (
 			await new Promise((r) => setTimeout(r, 15));
 		}
 		assert.equal(title, 'Jason');
+		assert.deepEqual(starts, [B]);
 		await aya.stop();
 	} finally {
 		await rm(home, { recursive: true, force: true });
