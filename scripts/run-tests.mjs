@@ -7,7 +7,7 @@ import { join, relative, resolve } from 'node:path';
 const ATTEMPTS = 3;
 const reporter = new URL('./failed-tests-reporter.mjs', import.meta.url).href;
 const dir = mkdtempSync(join(tmpdir(), 'aya-tests-'));
-const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const run = (attempt, files, names = []) => {
 	const out = join(dir, `failed-${attempt}.json`);
@@ -21,7 +21,7 @@ const run = (attempt, files, names = []) => {
 			'--test-reporter-destination=stdout',
 			`--test-reporter=${reporter}`,
 			`--test-reporter-destination=${out}`,
-			...names.flatMap((name) => ['--test-name-pattern', `^${escape(name)}$`]),
+			...names.flatMap((name) => ['--test-name-pattern', `^${escapeRegExp(name)}$`]),
 			...files,
 		],
 		{ stdio: 'inherit' },
