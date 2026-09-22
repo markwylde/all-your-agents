@@ -11,6 +11,7 @@ import { sqliteWriter } from '../../util/sqlite-writer.js';
 import { sleep, waitFor } from '../../util/wait.js';
 import {
 	A,
+	afterBind,
 	appendTranscript,
 	artifacts,
 	assistant,
@@ -70,7 +71,7 @@ test('a moved session keeps its finished subagent finished and still follows a r
 		await waitFor(() => aya.running().length === 1);
 		const child = (parent: string, n: number) => [
 			slot(),
-			header(`00000000-0000-4000-9000-00000000000${n}`, { parentSession: parent }),
+			header(`00000000-0000-4000-9000-00000000000${n}`, { parentSession: parent }, afterBind()),
 			entry('session_init', { agent: 'sonic' }),
 			user('task'),
 		];

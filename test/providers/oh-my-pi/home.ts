@@ -37,6 +37,12 @@ export function slot(title = '', source = 'auto') {
 	return { type: 'title', v: 1, title, source, updatedAt: iso(), pad: ' '.repeat(40) };
 }
 
+/**
+ * Seen live, a session may still be binding, and a child stamped in the very millisecond the
+ * bind began counts as already there. One stamped a millisecond on was born after it.
+ */
+export const afterBind = () => Date.now() + 1;
+
 export function header(id: string, over: Record<string, unknown> = {}, at?: number) {
 	return { type: 'session', version: 3, id, timestamp: iso(at), cwd: '/tmp/app', ...over };
 }

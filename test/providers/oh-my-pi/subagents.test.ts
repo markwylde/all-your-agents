@@ -9,6 +9,7 @@ import { ohMyPi } from '../../../src/providers/oh-my-pi/index.js';
 import { sleep, waitFor } from '../../util/wait.js';
 import {
 	A,
+	afterBind,
 	appendTranscript,
 	artifacts,
 	assistant,
@@ -58,12 +59,6 @@ function child(parentSession: string, n: number, agent = 'sonic', at?: number) {
 		user('Compute it'),
 	];
 }
-
-/**
- * Seen live, a session may still be binding, and a child stamped in the very millisecond the
- * bind began counts as already there. One stamped a millisecond on was born after it.
- */
-const afterBind = () => Date.now() + 1;
 
 const yielded = (name: string, status = 'success') => [
 	assistant('toolUse', [toolCall(`y-${name}`, 'yield')]),
