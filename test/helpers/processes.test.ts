@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execSync, spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { installTimerGuard } from '../../src/helpers/no-timers.js';
 import { createLocalProcesses } from '../../src/helpers/processes.js';
@@ -34,16 +34,45 @@ test('koffi stubbed out → unsupported', () => {
 });
 
 test('detached sleep not spawned as a child triggers onExit', async (t) => {
+	// `watch` answers before the worker has said whether the native wait works at all:
+	// `unsupported` only arrives as a message, so watch a throwaway child and wait for
+	// either its exit (native wait works) or the deadline (unsupported).
+	const throwaway = spawn('sleep', ['30'], { stdio: 'ignore' });
 	const probe = createLocalProcesses();
-	const probeHandle = probe.watch(1, () => {});
-	probe.close();
-	if (probeHandle === 'unsupported') {
+	let supported = false;
+	{
+		// `Promise.withResolvers` is Node 22+; `engines` allows Node 20.
+		const promise = new Promise<void>((resolve) => {
+			const handle = probe.watch(throwaway.pid ?? 0, () => {
+				supported = true;
+				resolve();
+			});
+			if (handle === 'unsupported') resolve();
+			else setTimeout(resolve, 2000);
+			throwaway.kill('SIGKILL');
+		});
+		await promise;
+	}
+	await probe.close();
+	if (!supported) {
 		t.skip('koffi watch unsupported');
 		return;
 	}
-	const live = createLocalProcesses();
-	const pid = Number(execSync('sleep 30 >/dev/null 2>&1 & echo $!').toString().trim());
+	// `sleep` is parented by `sh`, which stays alive to reap it: its death is then visible
+	// to `kill(pid, 0)` on machines with no reaping init. It is still no child of ours.
+	const babysitter = spawn('sh', ['-c', 'sleep 30 & echo $!; wait'], {
+		stdio: ['ignore', 'pipe', 'ignore'],
+	});
+	const pid = await new Promise<number>((resolve) => {
+		let out = '';
+		babysitter.stdout.on('data', (chunk: Buffer) => {
+			out += chunk.toString();
+			const line = out.split('\n', 1)[0]?.trim();
+			if (line) resolve(Number(line));
+		});
+	});
 	assert.ok(pid > 0);
+	const live = createLocalProcesses();
 	try {
 		process.kill(pid, 0);
 		let exitedAt: number | undefined;
@@ -52,6 +81,7 @@ test('detached sleep not spawned as a child triggers onExit', async (t) => {
 		});
 		assert.notEqual(handle, 'unsupported');
 		await new Promise((r) => setTimeout(r, 100));
+		assert.equal(exitedAt, undefined, 'onExit before the process exited');
 		process.kill(pid, 'SIGTERM');
 		let diedAt: number | undefined;
 		const started = Date.now();
@@ -77,6 +107,7 @@ test('detached sleep not spawned as a child triggers onExit', async (t) => {
 		} catch {
 			// already gone
 		}
+		babysitter.kill('SIGKILL');
 		await live.close();
 	}
 });
