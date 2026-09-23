@@ -9,7 +9,6 @@ import { ohMyPi } from '../../../src/providers/oh-my-pi/index.js';
 import { sleep, waitFor } from '../../util/wait.js';
 import {
 	A,
-	afterBind,
 	appendTranscript,
 	artifacts,
 	assistant,
@@ -81,7 +80,7 @@ test('three parallel subagents start with their type and end completed; other fi
 		const dir = artifacts(path);
 		const names = ['PowTwoTen', 'MulSeventeenTwentyThree', 'DivOneFortyFour'];
 		for (const [i, name] of names.entries())
-			await writeTranscript(join(dir, `${name}.jsonl`), child(path, i + 1, 'sonic', afterBind()));
+			await writeTranscript(join(dir, `${name}.jsonl`), child(path, i + 1, 'sonic'));
 		await writeFile(join(dir, '0.bash.log'), 'log');
 		await writeFile(join(dir, 'PowTwoTen.md'), 'result');
 		await writeFile(join(dir, 'PowTwoTen.json'), '{}');
@@ -115,7 +114,7 @@ test('background: a child outlives the turn; nested: its parent is the subagent 
 		await waitFor(() => live(A));
 		const dir = artifacts(path);
 		const outer = join(dir, 'ScoutCode.jsonl');
-		await writeTranscript(outer, child(path, 1, 'scout', afterBind()));
+		await writeTranscript(outer, child(path, 1, 'scout'));
 		await waitFor(() => events.includes('start:ScoutCode:scout::fg'));
 		await writeTranscript(
 			join(dir, 'ScoutCode', 'ScoutCode.Inner.jsonl'),
@@ -158,7 +157,7 @@ test('background: a child outlives a turn that ends waiting on a shell job, as i
 		});
 		await waitFor(() => live(A));
 		const outer = join(artifacts(path), 'ScoutCode.jsonl');
-		await writeTranscript(outer, child(path, 1, 'scout', afterBind()));
+		await writeTranscript(outer, child(path, 1, 'scout'));
 		await waitFor(() => events.includes('start:ScoutCode:scout::fg'));
 
 		await appendTranscript(path, [
@@ -209,7 +208,7 @@ test('an agent the task result spawned asynchronously starts as background', asy
 	});
 });
 
-test('catch-up: finished children are reported ended without a start; a running one is seeded', async () => {
+test('catch-up: finished children are reported ended without a start; a running one starts', async () => {
 	await withHome(async (home) => {
 		const procs = fakeOmpProcesses();
 		const path = await launch(home, procs, {
@@ -227,7 +226,7 @@ test('catch-up: finished children are reported ended without a start; a running 
 		await writeTranscript(join(dir, 'Still.jsonl'), child(path, 3, 'scout'));
 		const { aya, events, live } = observe(home, procs);
 		await aya.start();
-		assert.equal(events.length, 0, 'nothing starts now');
+		assert.deepEqual(events, ['start:Still:scout::fg']);
 		const subs = await live(A)?.subagents();
 		assert.deepEqual(subs?.map((s) => `${s.id}:${s.status}:${s.type}`).sort(), [
 			'Broke:failed:sonic',
@@ -251,13 +250,14 @@ test('catch-up: finished children are reported ended without a start; a running 
 	});
 });
 
-test('a child spawned while the session is still binding starts; one there before is seeded', async () => {
+test('at bind a running child starts and an ended one is seeded; one spawned while binding starts', async () => {
 	await withHome(async (home) => {
 		const procs = fakeOmpProcesses();
 		const path = sessionPath(home, A);
 		const dir = artifacts(path);
 		await writeTranscript(path, [slot(), header(A), user('go')]);
-		await writeTranscript(join(dir, 'Before.jsonl'), child(path, 1));
+		await writeTranscript(join(dir, 'Before.jsonl'), [...child(path, 1), ...yielded('Before')]);
+		await writeTranscript(join(dir, 'Running.jsonl'), child(path, 3));
 		await sleep(5);
 		// Holds the bind in its first read of the transcript, as a slow disk would.
 		const inner = createLocalFs();
@@ -286,7 +286,9 @@ test('a child spawned while the session is still binding starts; one there befor
 		await sleep(5);
 		await writeTranscript(join(dir, 'During.jsonl'), child(path, 2));
 		release?.();
-		await waitFor(() => events.includes('start:During:sonic::fg'));
+		await waitFor(
+			() => events.includes('start:During:sonic::fg') && events.includes('start:Running:sonic::fg'),
+		);
 		assert.equal(
 			events.some((e) => e.startsWith('start:Before')),
 			false,

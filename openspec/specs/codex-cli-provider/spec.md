@@ -287,7 +287,7 @@ Completion SHALL be recorded as follows, from the child's own rollout first:
 - a parent `CollabAgentToolCall` (`wait`, `close_agent`) whose `agents_states[childId]` is `completed` → `completed`; `errored` → `failed`; `interrupted`, `shutdown`, or `not_found` → `cancelled`; `pending_init` and `running` SHALL NOT end it
 - parent session close while the child is still open → `cancelled` (core also cancels on close)
 
-Whichever source reports first wins; a later one SHALL NOT emit a second `subagent:end`. A Codex agent can be sent further input after its first turn; a later `task_started` on an ended child SHALL NOT restart it or emit another `subagent:start`. A child still open when the parent goes `idle` SHALL stay open as `background`; the provider SHALL NOT cancel it on parent idle. The provider SHALL watch the date directory so a child rollout is seen as soon as the file appears. Child rollouts SHALL NOT be emitted as root sessions.
+Whichever source reports first wins; a later one SHALL NOT emit a second `subagent:end`. A Codex agent can be sent further input after its first turn; a later `task_started` on an ended child SHALL NOT restart it or emit another `subagent:start`. A child still open when the parent goes `idle` SHALL stay open as `background`; the provider SHALL NOT cancel it on parent idle. At bind, a child whose rollout already shows an end SHALL be reported through `subagents()` without `subagent:start`, and a child still open SHALL emit `subagent:start`, including when the child rollout was found before its parent was bound. The provider SHALL watch the date directory so a child rollout is seen as soon as the file appears. Child rollouts SHALL NOT be emitted as root sessions.
 
 #### Scenario: Collab agent finishes inside the parent turn
 - **WHEN** a child rollout appears with this thread's `parent_thread_id` and `agent_nickname` `Sartre`, and the child records `task_complete` before the parent's `task_complete`
@@ -312,6 +312,10 @@ Whichever source reports first wins; a later one SHALL NOT emit a second `subage
 #### Scenario: Resumed session with prior subagents
 - **WHEN** the provider binds to a resumed session whose history contains three finished child rollouts
 - **THEN** `subagents()` returns three ended subagents and no `subagent:start` is emitted for them
+
+#### Scenario: Running child found before the parent binds
+- **WHEN** a child rollout that is still open is read before its parent's rollout is bound
+- **THEN** `subagent:start` fires for it once when the parent binds
 
 #### Scenario: Subagent transcript
 - **WHEN** `transcript()` is called on a subagent
