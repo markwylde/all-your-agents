@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { execSync, spawn, spawnSync } from 'node:child_process';
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { test } from 'node:test';
+import { Worker } from 'node:worker_threads';
 import { installTimerGuard } from '../../src/helpers/no-timers.js';
 import { createLocalProcesses } from '../../src/helpers/processes.js';
 
@@ -33,17 +34,97 @@ test('koffi stubbed out → unsupported', () => {
 	procs.close();
 });
 
+type WorkerMessage = {
+	type: string;
+	pid?: number;
+	reason?: string;
+	errno?: number;
+	error?: string;
+};
+
+async function waitFor<T>(find: () => T | undefined, ms: number): Promise<T | undefined> {
+	const started = Date.now();
+	while (Date.now() - started < ms) {
+		const found = find();
+		if (found !== undefined) return found;
+		await new Promise((r) => setTimeout(r, 5));
+	}
+	return find();
+}
+
+async function withWatchWorker<T>(
+	fn: (worker: Worker, messages: WorkerMessage[], first: WorkerMessage) => Promise<T>,
+): Promise<T> {
+	const worker = new Worker(new URL('../../src/helpers/process-watch-worker.js', import.meta.url));
+	const messages: WorkerMessage[] = [];
+	worker.on('message', (msg: WorkerMessage) => messages.push(msg));
+	const exited = new Promise((r) => worker.once('exit', r));
+	try {
+		const first = await waitFor(
+			() => messages.find((msg) => msg.type === 'ready' || msg.type === 'unsupported'),
+			10_000,
+		);
+		assert.ok(first, 'watch worker said neither ready nor unsupported');
+		return await fn(worker, messages, first);
+	} finally {
+		worker.postMessage({ type: 'stop' });
+		await exited;
+	}
+}
+
+async function spawnDetachedSleep(): Promise<{ pid: number; babysitter: ChildProcess }> {
+	// `sleep` is parented by `sh`, which stays alive to reap it: its death is then visible
+	// to `kill(pid, 0)` on machines with no reaping init. It is still no child of ours.
+	const babysitter = spawn('sh', ['-c', 'sleep 30 & echo $!; wait'], {
+		stdio: ['ignore', 'pipe', 'ignore'],
+	});
+	const pid = await new Promise<number>((resolve) => {
+		let out = '';
+		babysitter.stdout?.on('data', (chunk: Buffer) => {
+			out += chunk.toString();
+			const line = out.split('\n', 1)[0]?.trim();
+			if (line) resolve(Number(line));
+		});
+	});
+	return { pid, babysitter };
+}
+
+test('watch worker reports a detached exit through its wait, not a failed open', async (t) => {
+	await withWatchWorker(async (worker, messages, first) => {
+		if (first.type === 'unsupported') {
+			t.skip(`koffi watch unsupported: ${first.error ?? 'no reason'}`);
+			return;
+		}
+		const { pid, babysitter } = await spawnDetachedSleep();
+		try {
+			worker.postMessage({ type: 'watch', pid });
+			await new Promise((r) => setTimeout(r, 200));
+			const early = messages.find((msg) => msg.type !== 'ready');
+			assert.equal(early, undefined, `before exit: ${JSON.stringify(early)}`);
+			process.kill(pid, 'SIGTERM');
+			const exit = await waitFor(() => messages.find((msg) => msg.type !== 'ready'), 3000);
+			assert.ok(exit, 'no exit message after the process exited');
+			assert.deepEqual(exit, { type: 'exit', pid, reason: 'event' });
+		} finally {
+			try {
+				process.kill(pid, 'SIGKILL');
+			} catch {
+				// already gone
+			}
+			babysitter.kill('SIGKILL');
+		}
+	});
+});
+
 test('detached sleep not spawned as a child triggers onExit', async (t) => {
-	const probe = createLocalProcesses();
-	const probeHandle = probe.watch(1, () => {});
-	probe.close();
-	if (probeHandle === 'unsupported') {
-		t.skip('koffi watch unsupported');
+	const first = await withWatchWorker(async (_worker, _messages, msg) => msg);
+	if (first.type === 'unsupported') {
+		t.skip(`koffi watch unsupported: ${first.error ?? 'no reason'}`);
 		return;
 	}
-	const live = createLocalProcesses();
-	const pid = Number(execSync('sleep 30 >/dev/null 2>&1 & echo $!').toString().trim());
+	const { pid, babysitter } = await spawnDetachedSleep();
 	assert.ok(pid > 0);
+	const live = createLocalProcesses();
 	try {
 		process.kill(pid, 0);
 		let exitedAt: number | undefined;
@@ -52,6 +133,7 @@ test('detached sleep not spawned as a child triggers onExit', async (t) => {
 		});
 		assert.notEqual(handle, 'unsupported');
 		await new Promise((r) => setTimeout(r, 100));
+		assert.equal(exitedAt, undefined, 'onExit before the process exited');
 		process.kill(pid, 'SIGTERM');
 		let diedAt: number | undefined;
 		const started = Date.now();
@@ -77,6 +159,7 @@ test('detached sleep not spawned as a child triggers onExit', async (t) => {
 		} catch {
 			// already gone
 		}
+		babysitter.kill('SIGKILL');
 		await live.close();
 	}
 });

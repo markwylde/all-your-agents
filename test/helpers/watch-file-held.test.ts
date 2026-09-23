@@ -4,25 +4,30 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createLocalFs } from '../../src/helpers/fs.js';
+import { createLocalSqlite } from '../../src/helpers/sqlite.js';
 import { watchFile } from '../../src/helpers/watch-file.js';
 import { sqliteWriter } from '../util/sqlite-writer.js';
 import { sleep, waitFor } from '../util/wait.js';
 
-test('heldOpen reports commits to a WAL that another process keeps open', async () => {
+test('heldOpen reports commits to a WAL that another process keeps open', async (t) => {
+	if (!(await createLocalSqlite())) return t.skip('this Node has no built-in SQLite');
 	const dir = await mkdtemp(join(tmpdir(), 'aya-file-held-'));
 	const db = join(dir, 'h.db');
 	const child = sqliteWriter(db);
-	child.stdin.write('pragma journal_mode=wal; create table t(a); insert into t values(0);\n');
 	const fs = createLocalFs();
 	try {
-		const started = Date.now();
-		while (Date.now() - started < 3000 && !(await fs.stat(`${db}-wal`))) await sleep(30);
+		await child.run('pragma journal_mode=wal; create table t(a); insert into t values(0);');
 		let held = 0;
 		const w = watchFile(fs, `${db}-wal`, () => held++, { quietMs: 15, heldOpen: true });
-		await sleep(150);
+		// Setup notifications can land late on a slow runner: count from a quiet baseline.
+		let seen = -1;
+		while (seen !== held) {
+			seen = held;
+			await sleep(200);
+		}
 		const before = held;
 		for (let i = 1; i <= 5; i++) {
-			child.stdin.write(`insert into t values(${i});\n`);
+			await child.run(`insert into t values(${i});`);
 			await sleep(60);
 		}
 		await waitFor(() => held > before);

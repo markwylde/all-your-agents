@@ -119,8 +119,8 @@ async function watchedDir() {
 	const events: string[] = [];
 	const w = watchDir(m.fs, DIR, (e) => events.push(`${e.type}:${e.name}`), { clock });
 	await w.ready;
-	// The watch's own open was churn. Let that pass run: nothing has changed.
-	clock.advance(25);
+	// The watch's own open was churn. Let both passes run: nothing has changed.
+	clock.advance(1000);
 	await drain();
 	assert.deepEqual(events.sort(), ['create:1.json', 'create:2.json']);
 	events.length = 0;
@@ -141,12 +141,32 @@ test('watchDir: a rewrite whose notification was lost is reported after churn, a
 	clock.advance(1);
 	await drain();
 	assert.deepEqual(events, ['change:2.json']);
+	clock.advance(975);
+	await drain();
+	assert.deepEqual(events, ['change:2.json'], 'the late pass finds nothing new');
 	assert.equal(clock.pending(), 0);
 
 	m.churn();
-	clock.advance(25);
+	clock.advance(1000);
 	await drain();
 	assert.deepEqual(events, ['change:2.json'], 'caught up once, not again');
+	w.close();
+});
+
+test('watchDir: a rewrite that lands after the first pass is reported by the late one', async () => {
+	const { m, clock, events, w } = await watchedDir();
+	m.churn();
+	clock.advance(25);
+	await drain();
+	assert.deepEqual(events, []);
+	m.write(join(DIR, '2.json'), 'two, rewritten');
+	clock.advance(974);
+	await drain();
+	assert.deepEqual(events, []);
+	clock.advance(1);
+	await drain();
+	assert.deepEqual(events, ['change:2.json']);
+	assert.equal(clock.pending(), 0);
 	w.close();
 });
 
@@ -175,8 +195,11 @@ test('watchDir: a burst of churn is one pass, unchanged entries are statted but 
 		join(DIR, '1.json'),
 		join(DIR, '2.json'),
 	]);
+	clock.advance(1000);
+	await drain();
+	assert.equal(m.calls.readDir - before.readDir, 2, 'and one late pass');
 	assert.deepEqual(events, []);
-	assert.equal(clock.pending(), 0, 'no timer remains once the pass has run');
+	assert.equal(clock.pending(), 0, 'no timer remains once the passes have run');
 	w.close();
 });
 
@@ -280,7 +303,7 @@ test('tailJsonl: an append whose notification was lost is yielded once after chu
 
 	const reads = m.calls.readRange;
 	m.churn();
-	clock.advance(25);
+	clock.advance(1000);
 	await drain();
 	assert.equal(m.calls.readRange, reads, 'nothing appended: a stat, no read');
 	assert.equal(clock.pending(), 0);

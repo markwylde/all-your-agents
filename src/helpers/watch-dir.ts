@@ -24,17 +24,20 @@ export function watchDir(
 	const maxLatencyMs = opts.maxLatencyMs ?? 1000;
 	const clock = opts.clock ?? systemClock;
 	const coalescer = coalesce(quietMs, maxLatencyMs, clock);
+	const late = coalesce(maxLatencyMs, maxLatencyMs, clock);
 	let closed = false;
 	let current: WatchHandle | undefined;
 
 	/**
-	 * Where the filesystem can drop events while another watch opens or closes, look once
-	 * at what this watch covers after that has happened. What there is to look at depends
+	 * Where the filesystem can drop events while another watch opens or closes, look at what
+	 * this watch covers after that has happened, and again once a slow rebuild surely has. What there is to look at depends
 	 * on whether the directory exists yet. Subscribed before any watch of our own opens.
 	 */
 	let catchUp: () => Promise<void> = async () => {};
 	const unsubscribe = fs.onWatchChurn?.(() => {
-		if (!closed) coalescer.notify(`churn:${path}`, () => void catchUp());
+		if (closed) return;
+		coalescer.notify(`churn:${path}`, () => void catchUp());
+		late.notify(`churn:${path}`, () => void catchUp());
 	});
 
 	/** Open a watch, unless closed. Never await between the `closed` check and `current`. */
@@ -233,6 +236,7 @@ export function watchDir(
 			closed = true;
 			unsubscribe?.();
 			coalescer.dispose();
+			late.dispose();
 			current?.close();
 			current = undefined;
 		},

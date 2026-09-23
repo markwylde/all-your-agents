@@ -197,6 +197,10 @@ export function ohMyPi(options: PathOptions = {}): Provider {
 		if (!ctx || bound.released) return;
 		for (const agent of bound.agents.values()) {
 			if (agent.reported) continue;
+			if (agent.facts.status === 'running') {
+				reportLive(bound, agent);
+				continue;
+			}
 			agent.reported = true;
 			ctx.emit('subagent:seed', agent.facts);
 		}

@@ -31,6 +31,7 @@ export function watchFile(
 	const maxLatencyMs = opts.maxLatencyMs ?? 1000;
 	const clock = opts.clock ?? systemClock;
 	const coalescer = coalesce(quietMs, maxLatencyMs, clock);
+	const late = coalesce(maxLatencyMs, maxLatencyMs, clock);
 	const parent = dirname(path);
 	const name = basename(path);
 	let closed = false;
@@ -82,10 +83,12 @@ export function watchFile(
 		else if (before) onChange({ type: 'delete', path });
 	};
 
-	/** Where watches can drop events while another opens or closes, look once afterwards. */
+	/** Where watches can drop events while another opens or closes, look afterwards, and again once a slow rebuild surely has. */
 	let catchUp: () => Promise<void> = () => service(true);
 	const unsubscribe = fs.onWatchChurn?.(() => {
-		if (!closed) coalescer.notify(`churn:${path}`, () => void catchUp());
+		if (closed) return;
+		coalescer.notify(`churn:${path}`, () => void catchUp());
+		late.notify(`churn:${path}`, () => void catchUp());
 	});
 
 	/** Open a watch, unless closed. Never await between the `closed` check and `current`. */
@@ -187,6 +190,7 @@ export function watchFile(
 			closed = true;
 			unsubscribe?.();
 			coalescer.dispose();
+			late.dispose();
 			current?.close();
 			current = undefined;
 			held?.close();

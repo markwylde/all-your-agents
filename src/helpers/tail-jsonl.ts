@@ -23,6 +23,7 @@ export function tailJsonl(fs: Fs, path: string, opts: TailJsonlOptions = {}): Ta
 	const maxLatencyMs = opts.maxLatencyMs ?? 1000;
 	const clock = opts.clock ?? systemClock;
 	const coalescer = coalesce(quietMs, maxLatencyMs, clock);
+	const late = coalesce(maxLatencyMs, maxLatencyMs, clock);
 	const queue: unknown[] = [];
 	let wake: (() => void) | undefined;
 	let closed = false;
@@ -107,7 +108,9 @@ export function tailJsonl(fs: Fs, path: string, opts: TailJsonlOptions = {}): Ta
 	// Subscribed before our own watch opens: that open is churn too, so an append that
 	// lands before the watch is really live is still read.
 	const unsubscribe = fs.onWatchChurn?.(() => {
-		if (!closed) coalescer.notify(`churn:${path}`, requestRead);
+		if (closed) return;
+		coalescer.notify(`churn:${path}`, requestRead);
+		late.notify(`churn:${path}`, requestRead);
 	});
 
 	let handle: WatchHandle | undefined;
@@ -159,6 +162,7 @@ export function tailJsonl(fs: Fs, path: string, opts: TailJsonlOptions = {}): Ta
 		closed = true;
 		unsubscribe?.();
 		coalescer.dispose();
+		late.dispose();
 		handle?.close();
 		wakeUp();
 	};

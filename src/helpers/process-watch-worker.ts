@@ -23,8 +23,8 @@ async function main(): Promise<void> {
 	let koffi: typeof import('koffi');
 	try {
 		koffi = (await import('koffi')).default;
-	} catch {
-		port.postMessage({ type: 'unsupported' });
+	} catch (err) {
+		port.postMessage({ type: 'unsupported', error: String(err) });
 		port.close();
 		return;
 	}
@@ -32,7 +32,7 @@ async function main(): Promise<void> {
 		if (platform() === 'darwin') runDarwin(koffi);
 		else if (platform() === 'linux') runLinux(koffi);
 		else {
-			port.postMessage({ type: 'unsupported' });
+			port.postMessage({ type: 'unsupported', error: `platform ${platform()}` });
 			port.close();
 		}
 	} catch (err) {
@@ -117,7 +117,7 @@ function runDarwin(koffi: typeof import('koffi')): void {
 			const n = kevent(kq, change, 1, events, 1, zeroTimeout);
 			if (n > 0) {
 				const ev = decodeKevent(events, 0);
-				if (ev.flags & EV_ERROR) port.postMessage({ type: 'exit', pid });
+				if (ev.flags & EV_ERROR) port.postMessage({ type: 'exit', pid, reason: 'kevent' });
 			}
 		}
 		pending.clear();
@@ -166,7 +166,7 @@ function runDarwin(koffi: typeof import('koffi')): void {
 				return;
 			}
 			if (err || n < 0) {
-				port.postMessage({ type: 'unsupported' });
+				port.postMessage({ type: 'unsupported', error: `wait ${err ?? n}` });
 				shutdown();
 				return;
 			}
@@ -177,7 +177,7 @@ function runDarwin(koffi: typeof import('koffi')): void {
 					continue;
 				}
 				if (ev.filter === EVFILT_PROC || ev.flags & EV_ERROR) {
-					port.postMessage({ type: 'exit', pid: ev.ident });
+					port.postMessage({ type: 'exit', pid: ev.ident, reason: 'event' });
 				}
 			}
 			loop();
@@ -190,7 +190,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 	const EPOLLIN = 0x001;
 	const EPOLL_CTL_ADD = 1;
 	const EPOLL_CTL_DEL = 2;
-	const SYS_pidfd_open = process.arch === 'arm64' ? 438 : 434;
+	const SYS_pidfd_open = 434;
 
 	const lib = koffi.load('libc.so.6');
 	const syscall = lib.func('long syscall(long n, ...)');
@@ -199,7 +199,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 		pidfdOpen = lib.func('int pidfd_open(int pid, unsigned int flags)');
 	} catch {
 		pidfdOpen = (pid, flags) => {
-			const fd = Number(syscall(SYS_pidfd_open, pid, flags));
+			const fd = Number(syscall(SYS_pidfd_open, 'int', pid, 'unsigned int', flags));
 			return !Number.isFinite(fd) || fd > 0x7fffffff ? -1 : fd;
 		};
 	}
@@ -253,14 +253,15 @@ function runLinux(koffi: typeof import('koffi')): void {
 			}
 			const fd = pidfdOpen(pid, 0);
 			if (fd < 0) {
-				port.postMessage({ type: 'exit', pid });
+				port.postMessage({ type: 'exit', pid, reason: 'pidfd_open', errno: koffi.errno() });
 				continue;
 			}
 			pidfds.set(pid, fd);
 			if (epollCtl(epfd, EPOLL_CTL_ADD, fd, encodeEpoll(EPOLLIN, fd)) !== 0) {
+				const errno = koffi.errno();
 				closeFn(fd);
 				pidfds.delete(pid);
-				port.postMessage({ type: 'exit', pid });
+				port.postMessage({ type: 'exit', pid, reason: 'epoll_ctl', errno });
 			}
 		}
 		pending.clear();
@@ -308,7 +309,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 				return;
 			}
 			if (err || n < 0) {
-				port.postMessage({ type: 'unsupported' });
+				port.postMessage({ type: 'unsupported', error: `wait ${err ?? n}` });
 				shutdown();
 				return;
 			}
@@ -328,7 +329,7 @@ function runLinux(koffi: typeof import('koffi')): void {
 						closeFn(fd);
 						pidfds.delete(pid);
 					}
-					port.postMessage({ type: 'exit', pid });
+					port.postMessage({ type: 'exit', pid, reason: 'event' });
 				}
 			}
 			loop();
