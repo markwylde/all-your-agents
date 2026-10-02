@@ -56,6 +56,25 @@ export function isTaskNotification(rec: Record<string, unknown>, text?: string):
 	return Boolean(text?.includes('<task-notification>'));
 }
 
+/**
+ * The task-notification text a record delivers, if any. One that arrives while a turn
+ * is running is queued, and is recorded as a `queued_command` attachment rather than
+ * as a user record.
+ */
+export function taskNotificationText(rec: Record<string, unknown>): string | undefined {
+	if (rec.type === 'user') {
+		const text = textOf(contentOf(rec));
+		return text && isTaskNotification(rec, text) ? text : undefined;
+	}
+	if (rec.type !== 'attachment') return undefined;
+	const attachment = rec.attachment;
+	if (!attachment || typeof attachment !== 'object') return undefined;
+	const queued = attachment as Record<string, unknown>;
+	if (queued.type !== 'queued_command' || typeof queued.prompt !== 'string') return undefined;
+	if (queued.commandMode !== 'task-notification' && !isTaskNotification(queued)) return undefined;
+	return queued.prompt;
+}
+
 export function isInterruption(text: string): boolean {
 	return text.startsWith('[Request interrupted by user');
 }
