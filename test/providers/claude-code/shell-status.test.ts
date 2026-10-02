@@ -231,3 +231,81 @@ test('at shell a foreground agent is cancelled and a background one keeps runnin
 		}
 	});
 });
+
+test('a task notification queued during a turn ends its background agent', async () => {
+	await withHome(16, async (home, start, procs) => {
+		const at = (ms: number) => new Date(Date.now() + ms).toISOString();
+		const notification = (toolUseId: string, status: string) =>
+			`<task-notification>\n<task-id>t</task-id>\n<tool-use-id>${toolUseId}</tool-use-id>\n<status>${status}</status>\n</task-notification>`;
+		const queued = (toolUseId: string, status: string, over: Record<string, unknown> = {}) => ({
+			type: 'attachment',
+			sessionId: ID_A,
+			timestamp: at(0),
+			attachment: {
+				type: 'queued_command',
+				prompt: notification(toolUseId, status),
+				commandMode: 'task-notification',
+				origin: { kind: 'task-notification', producer: 'session-task' },
+				...over,
+			},
+		});
+		const path = join(home, 'projects', encodeProjectDir(cwd), `${ID_A}.jsonl`);
+		const append = (rec: unknown) => appendFile(path, `${JSON.stringify(rec)}\n`);
+		await journal(home, cwd, ID_A, [
+			{ type: 'user', sessionId: ID_A, timestamp: at(-400), message: { content: 'go' } },
+		]);
+		await sessionFile(home, 16, { sessionId: ID_A, cwd, status: 'busy' }, start);
+		const aya = AllYourAgents({
+			providers: [claudeCode({ home })],
+			processes: procs,
+			debounce: { quietMs: 10 },
+		});
+		try {
+			const log: string[] = [];
+			aya.on('subagent:start', (s) => log.push(`start:${s.id}`));
+			aya.on('subagent:end', (s) => log.push(`end:${s.id}:${s.status}`));
+			await aya.start();
+			await append({
+				type: 'assistant',
+				sessionId: ID_A,
+				timestamp: at(0),
+				message: {
+					id: 'm1',
+					stop_reason: 'tool_use',
+					content: ['a', 'b', 'c'].map((id) => ({
+						type: 'tool_use',
+						id,
+						name: 'Agent',
+						input: { description: id, run_in_background: true },
+					})),
+				},
+			});
+			await waitFor(() => log.length === 3);
+			// A queued prompt the user typed, and a queued notification for a background shell.
+			await append(queued('a', 'completed', { commandMode: 'prompt', origin: { kind: 'human' } }));
+			await append(queued('some-bash-call', 'completed'));
+			await append(queued('a', 'completed'));
+			await append(queued('b', 'killed'));
+			await waitFor(() => log.length === 5);
+			// The same notification delivered again as a user record ends nothing twice.
+			await append({
+				type: 'user',
+				sessionId: ID_A,
+				timestamp: at(0),
+				origin: { kind: 'task-notification' },
+				message: { content: notification('a', 'completed') },
+			});
+			await sleep(100);
+			assert.deepEqual(log, [
+				'start:a',
+				'start:b',
+				'start:c',
+				'end:a:completed',
+				'end:b:cancelled',
+			]);
+			assert.equal(aya.running()[0]?.activity.openSubagents, 1);
+		} finally {
+			await aya.stop();
+		}
+	});
+});

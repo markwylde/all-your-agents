@@ -7,14 +7,13 @@ import type { SessionEvent, SubagentFacts, TurnFact } from '../../types.ts';
 import { closeOpenTurn, turnFactsFromRecord } from './activity.ts';
 import {
 	contentOf,
-	isTaskNotification,
 	mapRecord,
 	modelOf,
 	parseTaskNotification,
 	promptTitle,
 	recordTime,
 	resolveJournal,
-	textOf,
+	taskNotificationText,
 	toolResultText,
 } from './journal.ts';
 import { listSessions } from './list.ts';
@@ -245,9 +244,9 @@ export function claudeCode(options: PathOptions = {}): Provider {
 				});
 			}
 		}
-		const text = textOf(content);
-		if (row.type === 'user' && text && isTaskNotification(row, text)) {
-			const parsed = parseTaskNotification(text);
+		const notification = taskNotificationText(row);
+		if (notification) {
+			const parsed = parseTaskNotification(notification);
 			if (parsed.toolUseId && parsed.status) {
 				const agentId = bound.toolUseToAgent.get(parsed.toolUseId);
 				const recAgent = agentId ? bound.agents.get(agentId) : undefined;

@@ -10,6 +10,7 @@ import {
 	modelOf,
 	promptTitle,
 	resolveJournal,
+	taskNotificationText,
 } from '../../../src/providers/claude-code/journal.js';
 
 test('mapper tables', () => {
@@ -101,4 +102,33 @@ test('journal resolution: derived, lookup, ambiguity, sidechain', async () => {
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
+});
+
+test('task notification text comes from a user record or a queued attachment', () => {
+	const prompt = '<task-notification><tool-use-id>t1</tool-use-id></task-notification>';
+	assert.equal(
+		taskNotificationText({
+			type: 'user',
+			origin: { kind: 'task-notification' },
+			message: { content: prompt },
+		}),
+		prompt,
+	);
+	assert.equal(taskNotificationText({ type: 'user', message: { content: 'hello' } }), undefined);
+	const queued = (over: Record<string, unknown>) => ({
+		type: 'attachment',
+		attachment: { type: 'queued_command', prompt, ...over },
+	});
+	assert.equal(taskNotificationText(queued({ commandMode: 'task-notification' })), prompt);
+	assert.equal(taskNotificationText(queued({ origin: { kind: 'task-notification' } })), prompt);
+	// A prompt the user queued, even one quoting a notification, is not one.
+	assert.equal(taskNotificationText(queued({ commandMode: 'prompt' })), undefined);
+	assert.equal(
+		taskNotificationText(queued({ type: 'file', commandMode: 'task-notification' })),
+		undefined,
+	);
+	assert.equal(taskNotificationText({ type: 'attachment' }), undefined);
+	assert.equal(taskNotificationText({ type: 'queue-operation', content: prompt }), undefined);
+	// The attachment stays unmapped as a session event.
+	assert.equal(mapRecord(queued({ commandMode: 'task-notification' })).length, 0);
 });
