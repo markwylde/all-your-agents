@@ -68,6 +68,11 @@ export function claudeCode(options: PathOptions = {}): Provider {
 	 * only to be closed a moment later.
 	 */
 	const deferred = new Set<string>();
+	/**
+	 * Session files whose session id another live process holds. One id is one session,
+	 * so only the holder is bound; these are serviced again when the holder goes away.
+	 */
+	const waiting = new Map<number, { filePath: string; sessionId: string }>();
 	let scanning = false;
 	let processWatchUnsupported = false;
 	let closed = false;
@@ -88,7 +93,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		ctx?.emit('session:close', { id: bound.session.sessionId });
 	};
 
-	const teardown = (bound: Bound): void => {
+	const teardown = (bound: Bound, wake = true): void => {
 		bound.released = true;
 		bound.journalClose?.();
 		bound.pendingJournalClose?.();
@@ -105,6 +110,26 @@ export function claudeCode(options: PathOptions = {}): Provider {
 				void inOrder(entry.filePath, () => serviceFile(entry.filePath));
 			}
 		}
+		if (wake && !closed) {
+			for (const [pid, entry] of waiting) {
+				if (entry.sessionId !== bound.session.sessionId) continue;
+				waiting.delete(pid);
+				void inOrder(entry.filePath, () => serviceFile(entry.filePath));
+			}
+		}
+	};
+
+	/**
+	 * Whether a process naming a session id another live process holds waits for it.
+	 * The process that started last holds the id: resuming a conversation elsewhere is
+	 * where it carries on. Start times that cannot tell them apart leave things as they
+	 * are, so a rewrite of a waiting file never takes the session back.
+	 */
+	const waitsFor = (holder: Bound, parsed: ParsedSessionFile, wasWaiting: boolean): boolean => {
+		const held = holder.session.startedAt;
+		const mine = parsed.startedAt;
+		if (held != null && mine != null && held !== mine) return mine < held;
+		return wasWaiting;
 	};
 
 	const liveJob = (jobId: string, pid: number): Bound | undefined =>
@@ -427,6 +452,8 @@ export function claudeCode(options: PathOptions = {}): Provider {
 	const bind = async (filePath: string, parsed: ParsedSessionFile): Promise<void> => {
 		if (!ctx) return;
 		parked.delete(parsed.pid);
+		const wasWaiting = waiting.get(parsed.pid)?.sessionId === parsed.sessionId;
+		waiting.delete(parsed.pid);
 		if (parsed.spare) {
 			const byPid = bounds.get(parsed.pid);
 			if (byPid) {
@@ -465,6 +492,16 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			: await resolveJournal(ctx.fs, homeOf(), parsed.sessionId);
 		// Unwatched while the journal was being found.
 		if (!ctx || closed) return;
+		const holder = [...bounds.values()].find((b) => b.session.sessionId === parsed.sessionId);
+		if (holder) {
+			if (waitsFor(holder, parsed, wasWaiting)) {
+				waiting.set(parsed.pid, { filePath, sessionId: parsed.sessionId });
+				return;
+			}
+			emitClose(holder);
+			teardown(holder, false);
+			waiting.set(holder.pid, { filePath: holder.filePath, sessionId: parsed.sessionId });
+		}
 		const bound: Bound = {
 			pid: parsed.pid,
 			filePath,
@@ -609,6 +646,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 			bytes = await ctx.fs.readFile(path, { maxBytes: SESSION_FILE_MAX_BYTES });
 		} catch {
 			parked.delete(filenamePid);
+			waiting.delete(filenamePid);
 			const bound = bounds.get(filenamePid);
 			if (bound) {
 				emitClose(bound);
@@ -621,6 +659,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 		const parsed = parseSessionFile(filenamePid, bytes, info);
 		if (!parsed) {
 			parked.delete(filenamePid);
+			waiting.delete(filenamePid);
 			return;
 		}
 		await bind(path, parsed);
@@ -654,6 +693,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 					if (event.type === 'delete') {
 						const pid = Number(basename(event.path).replace(/\.json$/, ''));
 						parked.delete(pid);
+						waiting.delete(pid);
 						deferred.delete(event.path);
 						const bound = bounds.get(pid);
 						if (bound) {
@@ -678,6 +718,7 @@ export function claudeCode(options: PathOptions = {}): Provider {
 				watcher.close();
 				for (const bound of [...bounds.values()]) teardown(bound);
 				parked.clear();
+				waiting.clear();
 				deferred.clear();
 				ctx = undefined;
 			};
