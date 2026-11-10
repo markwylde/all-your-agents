@@ -4,9 +4,9 @@ Watch every coding agent on this machine, and inspect the sessions they leave be
 
 ## Compatibility
 
-<img src="docs/images/compatibility.svg" alt="Compatibility matrix. Every agent fully supports live detection, status, titles, model, subagents, transcript and history. Partial: Grok Build tools and turn outcome; oh-my-pi waiting-for; print mode on Claude Code, Grok Build and oh-my-pi. None: Codex CLI waiting-for." width="720">
+<img src="docs/images/compatibility.svg" alt="Compatibility matrix for Claude Code, Grok Build, Codex CLI, oh-my-pi and AntiGravity CLI. AntiGravity has partial SQLite support and no waiting reason or subagents; see the provider notes." width="720">
 
-Subagents covers start, end, background and nested.
+Subagents covers start, end, background and nested for Claude Code, Grok Build, Codex CLI and oh-my-pi.
 
 1. `claude -p` writes no live index entry, so a print-mode run appears in history only.
 2. Grok's `tool_started` carries no call id, so the current tool is identified by name. Two tools with the same name running at once show as one.
@@ -16,6 +16,7 @@ Subagents covers start, end, background and nested.
 6. omp writes no transcript until the first reply of a new session ends. That first turn is read from omp's prompt history, which needs SQLite: Node ≥ 22.13, or your own `sqlite` reader. Without it a new session reads `idle` until its transcript appears.
 7. A pending `ask` tool reads `waiting`. Permission approvals never reach disk, so a session blocked on one reads `running` (omp's default approval mode asks for none).
 8. omp names a run after the terminal on its stdin, in print mode too: `omp -p` typed in a terminal is live and reads `interactive`. Piped or detached, it has no terminal and appears in history only. Nothing on disk marks a run `headless`.
+9. AntiGravity CLI supports current SQLite roots. It needs SQLite and holder probes for live detection; tools, outcomes, models, transcripts and history cover supported persisted records only. Waiting reasons and subagents are unavailable. See [AntiGravity CLI](#antigravity-cli-agy) for limits.
 
 ## Usage
 
@@ -147,7 +148,7 @@ Status: `busy` → `running`, `waiting` → `waiting`, `shell` → `waiting` wit
 
 ## Grok Build
 
-Provider id `grok-build`, harness `Grok`. Home is `$GROK_HOME` if set, otherwise `~/.grok`, overridable via `grokBuild({ home })`. All four built-ins are in `builtInProviders`; pass `providers: [claudeCode()]` to watch Claude Code only.
+Provider id `grok-build`, harness `Grok`. Home is `$GROK_HOME` if set, otherwise `~/.grok`, overridable via `grokBuild({ home })`. All five built-ins are in `builtInProviders`; pass `providers: [claudeCode()]` to watch Claude Code only.
 
 Live index: `<home>/active_sessions.json`, an array of `{ session_id, pid, cwd, opened_at }`. One pid can hold several sessions. `grok -p` registers only when `GROK_TRACK_HEADLESS` is set; otherwise print-mode runs appear in history with `kind` `headless`. Sessions: `<home>/sessions/<encoded-cwd>/<id>/`. The cwd is percent-encoded like Rust `urlencoding` (everything but `A-Za-z0-9-._~`, so `/tmp/foo(bar)!` is `%2Ftmp%2Ffoo%28bar%29%21`); a cwd whose encoding exceeds 255 bytes is found by a one-level lookup for the session id.
 
@@ -170,6 +171,16 @@ omp keeps a registry in two parts. Each process writes `run/daemons/<project-has
 Transcripts: `agent/sessions/<encoded-cwd>/<timestamp>_<id>.jsonl`. The directory name is lossy, so `cwd` comes from the header. A session kept elsewhere (`--session notes/work`, `--session-dir`) is found through `agent/custom-session-files/`, and is bound from its breadcrumb once its file exists; omp gives a file not named `*.jsonl` no subagents. Status comes from the last conversation record: a user message, a tool result, or an assistant `stopReason` of `toolUse` → `running`; `stop` / `length` → `idle`; `error` → `idle` with the turn `failed` and its `errorMessage`; `aborted` → `idle`, `interrupted`. With no turn open, a `bash` result that omp backgrounded (`details.async`, `state: running`) makes that `waiting` with `waitingFor` `shell` until an `async-result` message or a later result reports the job; a job left by an earlier process is dropped. A turn omp retries after a provider error starts again without a new prompt. Tools come from `toolCall` blocks and their `toolResult`; titles from `title_change`; `model` from `model_change` and the latest reply. Subagents run inside the parent process and are read from `<session>/<AgentId>.jsonl` (nested ones from `<session>/<Parent>/<Parent>.<Child>.jsonl`): type from `session_init.agent`, done when the child records a successful `yield`, `background` when the `task` result said it spawned them asynchronously. For a finished session, a child whose transcript never says how it ended takes its parent's report of it, else `cancelled`.
 
 Only the `history` table of `agent/history.db` is read, and only for a session with no transcript yet. `agent.db`, `models.db`, `logs/`, `blobs/` and the `.lock` sidecars are never opened.
+
+## AntiGravity CLI (agy)
+
+Provider id `antigravity-cli`, harness `AntiGravity`. Exported as `antigravityCli({ home })` and included in `builtInProviders`. The default home is `~/.gemini/antigravity-cli`. Supports the SQLite format checked against agy 1.5.5. Requires Node ≥ 22.13 or an injected `sqlite` reader; without SQLite this provider yields no sessions.
+
+Live roots come from `presence/<uuid>.lock` with exactly one live process holding the file open. Locks left behind after exit are history only. The holder probe establishes an open descriptor, not executable identity or OS lock ownership; ambiguous holders are ignored. Resume touches the presence file, so it is discovered before another prompt. Process exit closes a session; a silent handle release is found on the next relevant notification or `reconcile(pid)`. Without holder probes, only history is available.
+
+Metadata and history come from `conversation_summaries.db`, backed by `conversations/<uuid>.db`. Child conversations and legacy `.pb`-only conversations are omitted. Status maps persisted IDLE to `idle`, RUNNING/BUSY/CANCELING to `running`, with a current WAITING step overriding a running summary to `waiting`. Unknown states omit status. An idle summary overrides an old waiting step.
+
+Transcripts include finalized user and assistant text, explicit tool calls/results and terminal turn outcomes. Pending steps are held until finalized, preserving order; streamed text is available when its step finishes. Each finalized step emits once per event stream, so later edits to that step are not replayed. Replacing a database ends its event stream; open a new stream to read the replacement. Model names are exposed only when stored as text in step metadata. Kind, waiting reason, subagents and background work are not inferred. Reasoning, generation metadata, credentials, logs and IPC are never read. Database and WAL notifications drive observation; there is no polling.
 
 ## Testing kit
 

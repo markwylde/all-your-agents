@@ -1,12 +1,13 @@
 import type { AllYourAgents as Instance } from './core/instance.ts';
 import { createAllYourAgents } from './core/instance.ts';
 import type { InstanceOptions } from './provider.ts';
+import { antigravityCli } from './providers/antigravity-cli/index.ts';
 import { claudeCode } from './providers/claude-code/index.ts';
 import { codexCli } from './providers/codex-cli/index.ts';
 import { grokBuild } from './providers/grok-build/index.ts';
 import { ohMyPi } from './providers/oh-my-pi/index.ts';
 
-export const builtInProviders = [claudeCode(), grokBuild(), codexCli(), ohMyPi()];
+export const builtInProviders = [claudeCode(), grokBuild(), codexCli(), ohMyPi(), antigravityCli()];
 
 export function AllYourAgents(opts: InstanceOptions = {}): Instance {
 	return createAllYourAgents({
@@ -15,7 +16,7 @@ export function AllYourAgents(opts: InstanceOptions = {}): Instance {
 	});
 }
 
-export { claudeCode, codexCli, grokBuild, ohMyPi };
+export { antigravityCli, claudeCode, codexCli, grokBuild, ohMyPi };
 
 export default AllYourAgents;
 

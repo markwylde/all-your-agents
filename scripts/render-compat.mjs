@@ -5,22 +5,22 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const AGENTS = ['Claude Code', 'Grok Build', 'Codex CLI', 'oh-my-pi'];
+const AGENTS = ['Claude Code', 'Grok Build', 'Codex CLI', 'oh-my-pi', 'AntiGravity CLI'];
 
 // One entry per feature; one cell per agent. F = full, P = partial, N = none.
 // A number after the letter is the README footnote for that cell.
 const MATRIX = [
-	['Live detection', 'F', 'F', 'F', 'F'],
-	['Status', 'F', 'F', 'F', 'F6'],
-	['Waiting for', 'F', 'F', 'N5', 'P7'],
-	['Titles', 'F', 'F', 'F', 'F'],
-	['Model', 'F', 'F', 'F', 'F'],
-	['Tools', 'F', 'P2', 'F', 'F'],
-	['Turn outcome', 'F', 'P3', 'F', 'F'],
-	['Subagents', 'F', 'F', 'F', 'F'],
-	['Transcript', 'F', 'F', 'F', 'F'],
-	['History', 'F', 'F', 'F', 'F'],
-	['Print mode', 'P1', 'P4', 'F', 'P8'],
+	['Live detection', 'F', 'F', 'F', 'F', 'F9'],
+	['Status', 'F', 'F', 'F', 'F6', 'P9'],
+	['Waiting for', 'F', 'F', 'N5', 'P7', 'N9'],
+	['Titles', 'F', 'F', 'F', 'F', 'F9'],
+	['Model', 'F', 'F', 'F', 'F', 'P9'],
+	['Tools', 'F', 'P2', 'F', 'F', 'P9'],
+	['Turn outcome', 'F', 'P3', 'F', 'F', 'P9'],
+	['Subagents', 'F', 'F', 'F', 'F', 'N9'],
+	['Transcript', 'F', 'F', 'F', 'F', 'P9'],
+	['History', 'F', 'F', 'F', 'F', 'P9'],
+	['Print mode', 'P1', 'P4', 'F', 'P8', 'P9'],
 ];
 
 const LABEL_W = 176;
