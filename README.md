@@ -4,9 +4,9 @@ Watch every coding agent on this machine, and inspect the sessions they leave be
 
 ## Compatibility
 
-<img src="docs/images/compatibility.svg" alt="Compatibility matrix for Claude Code, Grok Build, Codex CLI, oh-my-pi and AntiGravity CLI. AntiGravity has partial SQLite support and no waiting reason or subagents; see the provider notes." width="720">
+<img src="docs/images/compatibility.svg" alt="Compatibility matrix for Claude Code, Grok Build, Codex CLI, oh-my-pi and AntiGravity CLI. AntiGravity supports current SQLite sessions, including waiting reasons and subagents; legacy history has limits." width="720">
 
-Subagents covers start, end, background and nested for Claude Code, Grok Build, Codex CLI and oh-my-pi.
+Subagents covers start, end, background and nested for Claude Code, Grok Build, Codex CLI, oh-my-pi and AntiGravity CLI.
 
 1. `claude -p` writes no live index entry, so a print-mode run appears in history only.
 2. Grok's `tool_started` carries no call id, so the current tool is identified by name. Two tools with the same name running at once show as one.
@@ -16,7 +16,7 @@ Subagents covers start, end, background and nested for Claude Code, Grok Build, 
 6. omp writes no transcript until the first reply of a new session ends. That first turn is read from omp's prompt history, which needs SQLite: Node ≥ 22.13, or your own `sqlite` reader. Without it a new session reads `idle` until its transcript appears.
 7. A pending `ask` tool reads `waiting`. Permission approvals never reach disk, so a session blocked on one reads `running` (omp's default approval mode asks for none).
 8. omp names a run after the terminal on its stdin, in print mode too: `omp -p` typed in a terminal is live and reads `interactive`. Piped or detached, it has no terminal and appears in history only. Nothing on disk marks a run `headless`.
-9. AntiGravity CLI supports current SQLite roots. It needs SQLite and holder probes for live detection; tools, outcomes, models, transcripts and history cover supported persisted records only. Waiting reasons and subagents are unavailable. See [AntiGravity CLI](#antigravity-cli-agy) for limits.
+9. AntiGravity CLI supports agy 1.5.5 SQLite sessions, including live print runs, approvals/questions, models, tools, turn outcomes and nested/background subagents. SQLite and holder probes are required for live detection. Older binary `.pb` history uses generated text logs when present, with reduced metadata. `kind` remains unset because the persisted state does not identify interactive versus print mode. See [AntiGravity CLI](#antigravity-cli-agy).
 
 ## Usage
 
@@ -178,9 +178,17 @@ Provider id `antigravity-cli`, harness `AntiGravity`. Exported as `antigravityCl
 
 Live roots come from `presence/<uuid>.lock` with exactly one live process holding the file open. Locks left behind after exit are history only. The holder probe establishes an open descriptor, not executable identity or OS lock ownership; ambiguous holders are ignored. Resume touches the presence file, so it is discovered before another prompt. Process exit closes a session; a silent handle release is found on the next relevant notification or `reconcile(pid)`. Without holder probes, only history is available.
 
-Metadata and history come from `conversation_summaries.db`, backed by `conversations/<uuid>.db`. Child conversations and legacy `.pb`-only conversations are omitted. Status maps persisted IDLE to `idle`, RUNNING/BUSY/CANCELING to `running`, with a current WAITING step overriding a running summary to `waiting`. Unknown states omit status. An idle summary overrides an old waiting step.
+Metadata and history come from `conversation_summaries.db` and `conversations/<uuid>.db`. Generation metadata supplies readable model names and associates them with response steps, including model switches within an execution. Step metadata supplies timestamps, tool identities and errors. Executor metadata reports completion, failure and cancellation even when no final response was generated.
 
-Transcripts include finalized user and assistant text, explicit tool calls/results and terminal turn outcomes. Pending steps are held until finalized, preserving order; streamed text is available when its step finishes. Each finalized step emits once per event stream, so later edits to that step are not replayed. Replacing a database ends its event stream; open a new stream to read the replacement. Model names are exposed only when stored as text in step metadata. Kind, waiting reason, subagents and background work are not inferred. Reasoning, generation metadata, credentials, logs and IPC are never read. Database and WAL notifications drive observation; there is no polling.
+Status maps persisted IDLE to `idle` and RUNNING/BUSY/CANCELING to `running`. A WAITING step exposes `waitingFor: 'approval'`, `'ask'` or `'elicitation'` from its requested interaction. An idle summary with `not_fully_idle` and unfinished background work reports a `shell`, `task` or `subagent` wait. Daemon tasks do not keep an idle conversation waiting. Unknown states remain unset.
+
+Tools appear when their persisted step starts, with results when it finishes. Finalized user/assistant text is emitted once; token fragments and later edits to finalized text are not replayed. Pending tools do not block later conversation records, and background completion is revisited on notifications. Tool-calling responses do not end a turn, even when agy labels their stop reason STOP_PATTERN. Replacing a database ends its transcript stream; open a new stream to read the replacement.
+
+Child summaries and trajectory metadata expose foreground, background and nested subagents, their parent relationships, terminal states and separate transcripts. Child database/WAL writes update the root's subagent activity without requiring a separate child process or presence lock. Membership is validated before reading a child transcript.
+
+Older binary `.pb` conversations are recovered from `brain/<uuid>/.system_generated/logs/transcript_full.jsonl` (or `transcript.jsonl`) where available. This fallback exposes text, not missing tool-call IDs or model/background metadata. Conversations with neither SQLite nor a generated transcript remain unavailable. Reads are bounded to 4 MiB per persisted record and 64 MiB per legacy log; unknown formats are skipped.
+
+Both interactive and print sessions use the same live ownership and storage paths. `kind` remains unset: a TTY does not reliably distinguish `agy -p` from interactive mode. The provider needs no hooks or statusline configuration, does not launch agy, and reads no credentials. Database and WAL notifications drive observation without polling.
 
 ## Testing kit
 

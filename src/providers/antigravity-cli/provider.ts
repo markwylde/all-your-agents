@@ -1,20 +1,14 @@
 import { join } from 'node:path';
 import type { ProcessWatchResult } from '../../helpers/types.ts';
 import type { Provider, WatchContext } from '../../provider.ts';
-import type { SessionEvent } from '../../types.ts';
-import {
-	databaseOf,
-	homeOf,
-	ID,
-	lockOf,
-	STEP_COLUMNS,
-	steps,
-	summaries,
-	summariesOf,
-	terminal,
-} from './data.ts';
-import { freshEvents, inspect } from './inspect.ts';
-import { decodeStep, facts } from './steps.ts';
+import type { SubagentFacts } from '../../types.ts';
+import { homeOf, ID, lockOf, summaries, summariesOf } from './data.ts';
+import { inspect } from './inspect.ts';
+import { timestamp } from './protobuf.ts';
+import { facts } from './steps.ts';
+import { metadata, storagePath, trajectoryMetadata } from './storage.ts';
+import { readStream, type StreamState, streamState } from './stream.ts';
+import { subagents } from './subagents.ts';
 
 type Handle = { close(): void };
 type Binding = {
@@ -22,12 +16,14 @@ type Binding = {
 	pid: number;
 	startTime?: number;
 	ino?: number;
-	cursor: number;
+	state: StreamState;
+	path: string;
+	children: Map<string, SubagentFacts>;
+	childWatches: Map<string, Handle[]>;
 	active: boolean;
 	opened: boolean;
 	handles: Handle[];
 	process?: ProcessWatchResult;
-	tools: Set<string>;
 };
 
 export function antigravityCli(options: { home?: string } = {}): Provider {
@@ -41,9 +37,15 @@ export function antigravityCli(options: { home?: string } = {}): Provider {
 			for (const { snapshot } of await summaries(ctx, home, ctx.id)) {
 				if (ctx.since != null && (snapshot.updatedAt == null || snapshot.updatedAt < ctx.since))
 					continue;
+				const path = await storagePath(ctx, home, snapshot.id);
+				if (path) {
+					snapshot.model = (await metadata(ctx, path)).model;
+					snapshot.startedAt = timestamp(await trajectoryMetadata(ctx, path), 2);
+				}
 				yield snapshot;
 			}
 		},
+		subagents: (ctx, id) => subagents(ctx, home, id),
 		inspect: (ctx, id) => inspect(ctx, home, id),
 		revalidate: (ctx, pid) => reconcilers.get(ctx.emit)?.(pid),
 		async watch(ctx) {
@@ -73,33 +75,30 @@ export function antigravityCli(options: { home?: string } = {}): Provider {
 				b.active = false;
 				if (bindings.get(b.id) === b) bindings.delete(b.id);
 				for (const handle of b.handles) handle.close();
+				for (const handles of b.childWatches.values()) for (const handle of handles) handle.close();
 				if (b.process && b.process !== 'unsupported') b.process.stop();
 				if (b.opened && !stopped) ctx.emit('session:close', { id: b.id });
 			};
 			const read = async (b: Binding, replay: boolean): Promise<void> => {
-				const path = databaseOf(home, b.id);
+				const path = b.path;
 				const summary = (await summaries(ctx, home, b.id))[0];
 				const stat = await ctx.fs.stat(path);
 				if (!current(b)) return;
-				if (!summary || !stat || (b.ino != null && stat.ino != null && b.ino !== stat.ino)) {
+				if (
+					!summary ||
+					!stat ||
+					(await storagePath(ctx, home, b.id)) !== path ||
+					(b.ino != null && stat.ino != null && b.ino !== stat.ino)
+				) {
 					close(b);
 					return;
 				}
-				const events: SessionEvent[] = [];
-				let cursor = b.cursor;
-				const tools = new Set(b.tools);
-				let model: string | undefined;
-				for await (const row of steps(ctx, path, b.cursor)) {
-					if (!current(b)) return;
-					const decoded = decodeStep(row);
-					if (decoded?.model) model = decoded.model;
-					if (!terminal(row.status)) break;
-					cursor = Number(row.idx);
-					if (decoded) events.push(...freshEvents(decoded.events, tools));
-				}
-				const latest = (
-					await sqlite.query(path, `SELECT ${STEP_COLUMNS} FROM steps ORDER BY idx DESC LIMIT 1`)
-				)[0];
+				const result = await readStream(ctx, path, b.state);
+				const children = await subagents(ctx, home, b.id);
+				const model = result.model;
+				if (!b.opened)
+					summary.snapshot.startedAt = timestamp(await trajectoryMetadata(ctx, path), 2);
+
 				const info = await ctx.processInfo(b.pid);
 				if (!current(b)) return;
 				if (
@@ -109,18 +108,26 @@ export function antigravityCli(options: { home?: string } = {}): Provider {
 					close(b);
 					return;
 				}
-				b.cursor = cursor;
-				b.tools = tools;
+				b.state = result.state;
+				const backgroundWait =
+					summary.status === 'idle' && summary.notFullyIdle
+						? (result.backgroundWait ??
+							(children.some((c) => c.background && c.status === 'running')
+								? 'subagent'
+								: undefined))
+						: undefined;
 				const status =
-					summary.status === 'running' && latest?.status === 9 && decodeStep(latest)
+					backgroundWait || (summary.status === 'running' && result.waiting)
 						? 'waiting'
 						: summary.status;
+				const waitingFor = status === 'waiting' ? (backgroundWait ?? result.waitingFor) : undefined;
 				if (!b.opened) {
 					b.opened = true;
 					ctx.emit(known.has(b.id) ? 'session:open' : 'session:create', {
 						...summary.snapshot,
 						pid: b.pid,
 						status,
+						waitingFor,
 						model,
 					});
 					known.add(b.id);
@@ -133,10 +140,50 @@ export function antigravityCli(options: { home?: string } = {}): Provider {
 				});
 				if (summary.snapshot.title)
 					ctx.emit('title', { id: b.id, title: summary.snapshot.title, source: 'harness' });
-				ctx.emit('session:status', { id: b.id, status, updatedAt: summary.snapshot.updatedAt });
-				const turnFacts = facts(events);
+				ctx.emit('session:status', {
+					id: b.id,
+					status,
+					waitingFor,
+					updatedAt: summary.snapshot.updatedAt,
+				});
+				const turnFacts = facts(result.events);
 				if (replay) ctx.emit('activity:replay', { id: b.id, facts: turnFacts });
 				else for (const fact of turnFacts) ctx.emit('turn', { sessionId: b.id, ...fact });
+				for (const child of children) {
+					if (!current(b)) return;
+					const previous = b.children.get(child.id);
+					if (!previous) {
+						if (replay) ctx.emit('subagent:seed', child);
+						else ctx.emit('subagent:start', child);
+					}
+					if (child.status && child.status !== 'running' && previous?.status !== child.status)
+						ctx.emit('subagent:end', {
+							sessionId: b.id,
+							id: child.id,
+							status: child.status,
+							endedAt: child.endedAt,
+						});
+					b.children.set(child.id, child);
+					if (!b.childWatches.has(child.id)) {
+						const childPath = await storagePath(ctx, home, child.id);
+						if (!current(b)) return;
+						if (childPath) {
+							b.childWatches.set(
+								child.id,
+								[childPath, `${childPath}-wal`].map((p) =>
+									ctx.watchFile(
+										p,
+										() => {
+											void enqueue(() => read(b, false));
+										},
+										{ heldOpen: true },
+									),
+								),
+							);
+							void enqueue(() => read(b, false));
+						}
+					}
+				}
 			};
 			const refresh = async (id: string): Promise<void> => {
 				if (!ID.test(id) || stopped) return;
@@ -170,17 +217,21 @@ export function antigravityCli(options: { home?: string } = {}): Provider {
 					return;
 				}
 				if (!(await summaries(ctx, home, id)).length || stopped) return;
-				const stat = await ctx.fs.stat(databaseOf(home, id));
+				const path = await storagePath(ctx, home, id);
+				if (!path || stopped) return;
+				const stat = await ctx.fs.stat(path);
 				if (!stat || stopped) return;
 				b = {
 					id,
 					...owner,
 					ino: stat.ino,
-					cursor: -1,
+					state: streamState(),
+					path,
+					children: new Map(),
+					childWatches: new Map(),
 					active: true,
 					opened: false,
 					handles: [],
-					tools: new Set(),
 				};
 				const binding = b;
 				bindings.set(id, binding);
@@ -189,7 +240,6 @@ export function antigravityCli(options: { home?: string } = {}): Provider {
 					if (binding.process !== 'unsupported') binding.process.stop();
 					return;
 				}
-				const path = databaseOf(home, id);
 				for (const p of [path, `${path}-wal`])
 					binding.handles.push(
 						ctx.watchFile(
@@ -224,9 +274,9 @@ export function antigravityCli(options: { home?: string } = {}): Provider {
 				if (ID.test(id)) void enqueue(() => refresh(id));
 			});
 			const conversations = ctx.watchDir(join(home, 'conversations'), (event) => {
-				if (!event.name.endsWith('.db')) return;
+				if (!/\.(db|pb)$/.test(event.name)) return;
 				const id = event.name.slice(0, -3);
-				if (ID.test(id)) void enqueue(() => refresh(id));
+				if (ID.test(id)) void enqueue(discover);
 			});
 			handles.push(presence, conversations);
 			for (const p of [summariesOf(home), `${summariesOf(home)}-wal`])
@@ -247,7 +297,7 @@ export function antigravityCli(options: { home?: string } = {}): Provider {
 			};
 			try {
 				for (const name of await ctx.fs.readDir(join(home, 'conversations')).catch(() => []))
-					if (name.endsWith('.db') && ID.test(name.slice(0, -3))) known.add(name.slice(0, -3));
+					if (/\.(db|pb)$/.test(name) && ID.test(name.slice(0, -3))) known.add(name.slice(0, -3));
 				release();
 				await Promise.all([presence.ready, conversations.ready]);
 				await enqueue(discover);

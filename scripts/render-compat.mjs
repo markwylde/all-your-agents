@@ -11,16 +11,16 @@ const AGENTS = ['Claude Code', 'Grok Build', 'Codex CLI', 'oh-my-pi', 'AntiGravi
 // A number after the letter is the README footnote for that cell.
 const MATRIX = [
 	['Live detection', 'F', 'F', 'F', 'F', 'F9'],
-	['Status', 'F', 'F', 'F', 'F6', 'P9'],
-	['Waiting for', 'F', 'F', 'N5', 'P7', 'N9'],
+	['Status', 'F', 'F', 'F', 'F6', 'F9'],
+	['Waiting for', 'F', 'F', 'N5', 'P7', 'F9'],
 	['Titles', 'F', 'F', 'F', 'F', 'F9'],
-	['Model', 'F', 'F', 'F', 'F', 'P9'],
-	['Tools', 'F', 'P2', 'F', 'F', 'P9'],
-	['Turn outcome', 'F', 'P3', 'F', 'F', 'P9'],
-	['Subagents', 'F', 'F', 'F', 'F', 'N9'],
-	['Transcript', 'F', 'F', 'F', 'F', 'P9'],
+	['Model', 'F', 'F', 'F', 'F', 'F9'],
+	['Tools', 'F', 'P2', 'F', 'F', 'F9'],
+	['Turn outcome', 'F', 'P3', 'F', 'F', 'F9'],
+	['Subagents', 'F', 'F', 'F', 'F', 'F9'],
+	['Transcript', 'F', 'F', 'F', 'F', 'F9'],
 	['History', 'F', 'F', 'F', 'F', 'P9'],
-	['Print mode', 'P1', 'P4', 'F', 'P8', 'P9'],
+	['Print mode', 'P1', 'P4', 'F', 'P8', 'F9'],
 ];
 
 const LABEL_W = 176;
