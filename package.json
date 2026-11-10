@@ -47,17 +47,17 @@
   "author": "Mark Wylde",
   "license": "AGPL-3.0-or-later",
   "devDependencies": {
-    "@biomejs/biome": "^2.2.4",
+    "@biomejs/biome": "^2.6.6",
     "@semantic-release/exec": "^7.1.0",
-    "@semantic-release/github": "^12.0.9",
-    "@semantic-release/npm": "^13.1.5",
-    "@types/node": "^24.3.1",
+    "@semantic-release/github": "^12.0.10",
+    "@semantic-release/npm": "^13.2.0",
+    "@types/node": "^26.6.6",
     "c8": "^12.0.0",
     "semantic-release": "^25.0.9",
-    "typescript": "^5.9.2"
+    "typescript": "^7.0.2"
   },
   "optionalDependencies": {
-    "koffi": "^2.14.1"
+    "koffi": "^3.3.7"
   },
   "repository": {
     "type": "git",
