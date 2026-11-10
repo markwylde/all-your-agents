@@ -20,7 +20,7 @@ function onMessage(fn: (msg: { type: string; pid?: number }) => void): void {
 }
 
 async function main(): Promise<void> {
-	let koffi: typeof import('koffi');
+	let koffi: typeof import('koffi').default;
 	try {
 		koffi = (await import('koffi')).default;
 	} catch (err) {
@@ -71,7 +71,7 @@ function decodeKevent(
 	};
 }
 
-function runDarwin(koffi: typeof import('koffi')): void {
+function runDarwin(koffi: typeof import('koffi').default): void {
 	const EVFILT_READ = -1;
 	const EVFILT_PROC = -5;
 	const EV_ADD = 0x0001;
@@ -186,7 +186,7 @@ function runDarwin(koffi: typeof import('koffi')): void {
 	loop();
 }
 
-function runLinux(koffi: typeof import('koffi')): void {
+function runLinux(koffi: typeof import('koffi').default): void {
 	const EPOLLIN = 0x001;
 	const EPOLL_CTL_ADD = 1;
 	const EPOLL_CTL_DEL = 2;
