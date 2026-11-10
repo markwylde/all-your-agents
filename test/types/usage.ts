@@ -116,3 +116,8 @@ void omp.harness;
 // A consumer may bring its own SQLite reader, or turn the built-in one off.
 void AllYourAgents({ providers: [omp], sqlite: false });
 void AllYourAgents({ providers: [omp], sqlite: { query: async () => [] } });
+
+// AntiGravity can be selected independently with a custom data home.
+import { antigravityCli } from '../../src/index.js';
+
+antigravityCli({ home: '/tmp/agy-data' });
