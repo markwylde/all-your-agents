@@ -10,7 +10,7 @@ AntiGravity's `agy` CLI is missing from the built-in providers. Its local SQLite
 - Discover live root conversations through held `presence/<uuid>.lock` files and validate their processes; stale lock files are history only.
 - Read current SQLite summaries and conversation steps through the injected SQLite reader for metadata, status, history and normalized conversation events.
 - Follow database and WAL notifications with shared watch helpers, never polling.
-- Document format and runtime limits. Legacy protobuf files, remote-only sessions, subagent tracking, numeric model-name resolution and background-work inference are outside this first version.
+- Support readable model names, structured waiting reasons, pending tools, executor outcomes and nested/background child conversations. Recover older text history from generated logs where available. Document opaque legacy data and unpersisted session-kind limits.
 
 ## Capabilities
 

@@ -2,7 +2,7 @@
 
 Status: accepted for this change.
 
-Use read-only injected SQLite and OS notifications, consistent with ADR 0001. Held presence locks identify a CLI conversation owner more accurately than timestamps or backend database handles. Support the current SQLite schema; omit legacy protobuf-only conversations and facts whose semantics have not been established. This avoids auth/IPC coupling and new dependencies at the cost of documented partial compatibility.
+Use read-only injected SQLite and OS notifications, consistent with ADR 0001. Held presence locks identify a CLI conversation owner more accurately than timestamps or backend database handles. Support the current SQLite schema, including generation/executor metadata, requested interactions and child trajectories. Recover legacy text from generated logs when available; opaque protobuf files without logs remain unavailable. This avoids auth/IPC coupling and new dependencies.
 
 ## Registry evidence (agy 1.5.5, macOS, 2026-11-10)
 

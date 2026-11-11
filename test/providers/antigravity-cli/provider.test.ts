@@ -15,7 +15,7 @@ import type {
 import { AllYourAgents, antigravityCli } from '../../../src/index.js';
 import { databaseOf, lockOf, summariesOf } from '../../../src/providers/antigravity-cli/data.js';
 import { sleep, waitFor } from '../../util/wait.js';
-import { A, assistant, B, summary, user } from './fixtures.js';
+import { A, assistant, B, proto, row, summary, user } from './fixtures.js';
 
 async function fixture(clock?: Clock) {
 	const home = await mkdtemp(join(tmpdir(), 'aya-agy-'));
@@ -28,6 +28,7 @@ async function fixture(clock?: Clock) {
 	const living = new Set<number>([10001, 10002]);
 	const exits = new Map<number, () => void>();
 	const queries: string[] = [];
+	const extras = new Map<string, Record<string, SqliteRow[]>>();
 	const sqlite: Sqlite = {
 		async query(path, sql, params = []) {
 			queries.push(`${path}:${sql}`);
@@ -35,6 +36,9 @@ async function fixture(clock?: Clock) {
 				return [...catalog.values()].filter(
 					(r) => !params.length || r.conversation_id === params[0],
 				);
+			const table = /FROM (\w+)/.exec(sql)?.[1] ?? '';
+			const extraId = path.split('/').at(-1)?.slice(0, -3) ?? '';
+			if (table !== 'steps') return extras.get(extraId)?.[table] ?? [];
 			const id = path.split('/').at(-1)?.slice(0, -3) ?? '';
 			const list = rows.get(id) ?? [];
 			return sql.includes('DESC')
@@ -94,6 +98,7 @@ async function fixture(clock?: Clock) {
 		living,
 		exits,
 		queries,
+		extras,
 		sqlite,
 		processes,
 		add,
@@ -285,7 +290,7 @@ test('an asynchronous read error reports once and retries without dropping final
 		const original = f.sqlite.query;
 		let fail = true;
 		f.sqlite.query = async (path, sql, params) => {
-			if (path === databaseOf(f.home, A) && sql.includes('DESC') && fail) {
+			if (path === databaseOf(f.home, A) && sql.includes('FROM gen_metadata') && fail) {
 				fail = false;
 				throw new Error('transient fixture failure');
 			}
@@ -481,6 +486,175 @@ test('a synchronous process-exit callback cannot attach orphaned binding watches
 		assert.ok(stopped > 0);
 		await f.aya.stop();
 		assert.equal(f.watches.size, 0);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test('approval reasons and tool starts update before completion, then clear', async () => {
+	const f = await fixture();
+	try {
+		await f.add();
+		const call = proto([1, 'cmd-1'], [2, 'run_command']);
+		const pending = row(1, 132, 140, proto(), 9, proto([4, call]));
+		pending.step_payload = new Uint8Array([
+			...(pending.step_payload as Uint8Array),
+			...proto([56, proto([21, proto([1, proto([1, 'command'], [2, 'printf fixture'])])])]),
+		]);
+		f.rows.set(A, [user(), pending]);
+		f.catalog.set(A, { ...summary(), status: 'CASCADE_RUN_STATUS_RUNNING' });
+		await f.aya.start();
+		assert.equal(f.aya.running()[0]?.waitingFor, 'approval');
+		assert.equal(f.aya.running()[0]?.activity.tool?.name, 'run_command');
+		f.rows.set(A, [user(), row(1, 132, 140, proto(), 3, proto([4, call])), assistant(2)]);
+		f.catalog.set(A, summary());
+		await f.aya.reconcile();
+		assert.equal(f.aya.running()[0]?.waitingFor, undefined);
+		assert.equal(f.aya.running()[0]?.activity.tool, undefined);
+		assert.equal(f.aya.running()[0]?.activity.lastTurn, 'completed');
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test('nested background children follow their own WAL without independent presence locks', async () => {
+	const f = await fixture();
+	const C = '33333333-3333-4333-8333-333333333333';
+	const starts: string[] = [],
+		ends: string[] = [];
+	f.aya.on('subagent:start', (s) => starts.push(s.id));
+	f.aya.on('subagent:end', (s) => ends.push(s.id));
+	try {
+		await f.add();
+		await f.aya.start();
+		for (const [id, parent, background] of [
+			[B, A, 1],
+			[C, B, 0],
+		] as const) {
+			f.catalog.set(id, {
+				...summary(id),
+				parent_conversation_id: parent,
+				status: 'CASCADE_RUN_STATUS_RUNNING',
+			});
+			f.rows.set(id, [user()]);
+			f.extras.set(id, {
+				trajectory_metadata_blob: [
+					{ data: proto([5, parent], [6, A], [8, proto([1, 'explorer'], [9, background])]) },
+				],
+			});
+			await writeFile(databaseOf(f.home, id), 'child');
+		}
+		await f.aya.reconcile();
+		await waitFor(() => starts.length === 2);
+		const session = f.aya.running()[0];
+		assert.ok(session);
+		assert.equal(f.aya.running().length, 1);
+		const children = await session.subagents();
+		assert.equal(children.find((c) => c.id === B)?.background, true);
+		assert.equal(children.find((c) => c.id === C)?.parentId, B);
+		assert.equal(session.activity.openSubagents, 2);
+		f.rows.set(C, [user(), assistant()]);
+		f.catalog.set(C, { ...summary(C), parent_conversation_id: B });
+		await writeFile(`${databaseOf(f.home, C)}-wal`, 'finished');
+		await waitFor(() => ends.includes(C));
+		assert.equal(f.aya.running()[0]?.activity.openSubagents, 1);
+		const child = (await session.subagents()).find((c) => c.id === C);
+		assert.ok(child);
+		const turns = [];
+		for await (const turn of child.transcript()) turns.push(turn);
+		assert.equal(turns[0]?.outcome, 'completed');
+		f.catalog.set(B, { ...summary(B), parent_conversation_id: A, killed: 1 });
+		await writeFile(`${databaseOf(f.home, B)}-wal`, 'cancelled');
+		await waitFor(() => ends.includes(B));
+		assert.equal((await session.subagents()).find((c) => c.id === B)?.status, 'cancelled');
+		assert.equal(f.errors.length, 0);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test('background task gaps do not hide later turns and idle wakeup work reports shell', async () => {
+	const f = await fixture();
+	try {
+		await f.add();
+		const call = proto([1, 'background-1'], [2, 'run_command']);
+		const pending = row(1, 132, 140, proto(), 2, proto([4, call]));
+		pending.step_payload = new Uint8Array([
+			...(pending.step_payload as Uint8Array),
+			...proto([148, proto([1, 'task-1'], [8, proto([1, 1800000001])])]),
+		]);
+		f.rows.set(A, [user(), pending, assistant(2)]);
+		f.catalog.set(A, { ...summary(), not_fully_idle: 1 });
+		await f.aya.start();
+		assert.equal(f.aya.running()[0]?.status, 'waiting');
+		assert.equal(f.aya.running()[0]?.waitingFor, 'shell');
+		assert.equal(f.aya.running()[0]?.activity.lastTurn, 'completed');
+		f.rows.set(A, [user(), row(1, 132, 140, proto(), 3, proto([4, call])), assistant(2)]);
+		f.catalog.set(A, summary());
+		await f.aya.reconcile();
+		assert.equal(f.aya.running()[0]?.status, 'idle');
+		assert.equal(f.aya.running()[0]?.waitingFor, undefined);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test('legacy generated logs recover history without decoding opaque protobuf or inventing tool IDs', async () => {
+	const f = await fixture();
+	try {
+		await writeFile(
+			databaseOf(f.home, A).replace(/\.db$/, '.pb'),
+			new Uint8Array([214, 30, 94, 205]),
+		);
+		const directory = join(f.home, 'brain', A, '.system_generated', 'logs');
+		await mkdir(directory, { recursive: true });
+		await writeFile(
+			join(directory, 'transcript_full.jsonl'),
+			[
+				{ step_index: 0, type: 'USER_INPUT', status: 'DONE', content: 'Legacy question' },
+				{
+					step_index: 1,
+					type: 'PLANNER_RESPONSE',
+					status: 'DONE',
+					tool_calls: [{ name: 'read_file', args: {} }],
+				},
+				{ step_index: 2, type: 'PLANNER_RESPONSE', status: 'DONE', content: 'Legacy answer' },
+			]
+				.map((r) => JSON.stringify(r))
+				.join('\n'),
+		);
+		const session = await f.aya.get(A);
+		assert.ok(session);
+		const turns = [];
+		for await (const turn of session.transcript()) turns.push(turn);
+		assert.deepEqual(
+			turns[0]?.events.map((e) => e.kind),
+			['user', 'assistant', 'turn-end'],
+		);
+		assert.equal(turns[0]?.outcome, 'completed');
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test('child membership rejects cycles and conflicting trajectory roots', async () => {
+	const f = await fixture();
+	try {
+		await f.add();
+		await writeFile(databaseOf(f.home, B), 'child');
+		f.catalog.set(B, { ...summary(B), parent_conversation_id: B });
+		const session = await f.aya.get(A);
+		assert.ok(session);
+		assert.deepEqual(await session.subagents(), []);
+		f.catalog.set(B, { ...summary(B), parent_conversation_id: A });
+		f.extras.set(B, { trajectory_metadata_blob: [{ data: proto([5, A], [6, B]) }] });
+		assert.deepEqual(await session.subagents(), []);
+		const inspector = antigravityCli({ home: f.home }).inspect;
+		assert.ok(inspector);
+		const bad = inspector({ fs: f.fs, sqlite: f.sqlite, subagentId: B }, A);
+		const events = [];
+		for await (const event of bad) events.push(event);
+		assert.deepEqual(events, []);
 	} finally {
 		await f.cleanup();
 	}

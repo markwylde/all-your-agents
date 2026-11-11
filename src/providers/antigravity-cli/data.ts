@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Fs, Sqlite, SqliteRow } from '../../helpers/types.ts';
 import type { SessionSnapshot, SessionStatus } from '../../types.ts';
+import { storagePath } from './storage.ts';
 
 export const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const MAX_PAYLOAD = 4 * 1024 * 1024;
@@ -13,11 +14,11 @@ export const databaseOf = (home: string, id: string): string =>
 export const lockOf = (home: string, id: string): string => join(home, 'presence', `${id}.lock`);
 export const summariesOf = (home: string): string => join(home, 'conversation_summaries.db');
 export type Reader = { fs: Fs; sqlite?: Sqlite };
-export type Summary = { snapshot: SessionSnapshot; status?: SessionStatus };
+export type Summary = { snapshot: SessionSnapshot; status?: SessionStatus; notFullyIdle?: boolean };
 
-export function parseSummary(row: SqliteRow): Summary | undefined {
+export function parseSummary(row: SqliteRow, children = false): Summary | undefined {
 	if (typeof row.conversation_id !== 'string' || !ID.test(row.conversation_id)) return;
-	if (row.parent_conversation_id != null && row.parent_conversation_id !== '') return;
+	if (!children && row.parent_conversation_id != null && row.parent_conversation_id !== '') return;
 	const snapshot: SessionSnapshot = {
 		id: row.conversation_id,
 		provider: 'antigravity-cli',
@@ -34,7 +35,7 @@ export function parseSummary(row: SqliteRow): Summary | undefined {
 	}
 	try {
 		if (typeof row.workspace_uris !== 'string' || row.workspace_uris.length > 1048576)
-			return { snapshot, status: statusOf(row.status) };
+			return { snapshot, status: statusOf(row.status), notFullyIdle: row.not_fully_idle === 1 };
 		const uris: unknown = JSON.parse(row.workspace_uris);
 		if (Array.isArray(uris)) {
 			for (const uri of uris) {
@@ -53,7 +54,7 @@ export function parseSummary(row: SqliteRow): Summary | undefined {
 		/* Optional metadata is not a reason to lose a valid conversation. */
 	}
 	const status = statusOf(row.status);
-	return { snapshot, status };
+	return { snapshot, status, notFullyIdle: row.not_fully_idle === 1 };
 }
 
 function statusOf(value: unknown): SessionStatus | undefined {
@@ -75,14 +76,13 @@ export async function summaries(ctx: Reader, home: string, id?: string): Promise
 	if (!(await ctx.fs.stat(path))?.isFile) return [];
 	const rows = await ctx.sqlite.query(
 		path,
-		`SELECT conversation_id, title, workspace_uris, status, parent_conversation_id, last_modified_time FROM conversation_summaries${id ? ' WHERE conversation_id = ?' : ''}`,
+		`SELECT conversation_id, title, workspace_uris, status, parent_conversation_id, last_modified_time, not_fully_idle FROM conversation_summaries${id ? ' WHERE conversation_id = ?' : ''}`,
 		id ? [id] : [],
 	);
 	const result: Summary[] = [];
 	for (const row of rows) {
 		const parsed = parseSummary(row);
-		if (parsed && (await ctx.fs.stat(databaseOf(home, parsed.snapshot.id)))?.isFile)
-			result.push(parsed);
+		if (parsed && (await storagePath(ctx, home, parsed.snapshot.id))) result.push(parsed);
 	}
 	return result;
 }

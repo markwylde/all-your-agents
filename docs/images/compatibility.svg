@@ -53,7 +53,7 @@
 <circle class="full" cx="486" cy="106" r="6.5"/>
 <circle class="full" cx="610" cy="106" r="6.5"/>
 <text class="note" x="620.5" y="104">6</text>
-<circle class="part-ring" cx="734" cy="106" r="5.75"/><path class="part" d="M734 99.5A6.5 6.5 0 0 0 734 112.5Z"/>
+<circle class="full" cx="734" cy="106" r="6.5"/>
 <text class="note" x="744.5" y="104">9</text>
 <text class="feat" x="16" y="146.5">Waiting for</text>
 <circle class="full" cx="238" cy="142" r="6.5"/>
@@ -62,7 +62,7 @@
 <text class="note" x="496.5" y="140">5</text>
 <circle class="part-ring" cx="610" cy="142" r="5.75"/><path class="part" d="M610 135.5A6.5 6.5 0 0 0 610 148.5Z"/>
 <text class="note" x="620.5" y="140">7</text>
-<circle class="none" cx="734" cy="142" r="5.75"/>
+<circle class="full" cx="734" cy="142" r="6.5"/>
 <text class="note" x="744.5" y="140">9</text>
 <text class="feat" x="16" y="182.5">Titles</text>
 <circle class="full" cx="238" cy="178" r="6.5"/>
@@ -76,7 +76,7 @@
 <circle class="full" cx="362" cy="214" r="6.5"/>
 <circle class="full" cx="486" cy="214" r="6.5"/>
 <circle class="full" cx="610" cy="214" r="6.5"/>
-<circle class="part-ring" cx="734" cy="214" r="5.75"/><path class="part" d="M734 207.5A6.5 6.5 0 0 0 734 220.5Z"/>
+<circle class="full" cx="734" cy="214" r="6.5"/>
 <text class="note" x="744.5" y="212">9</text>
 <text class="feat" x="16" y="254.5">Tools</text>
 <circle class="full" cx="238" cy="250" r="6.5"/>
@@ -84,7 +84,7 @@
 <text class="note" x="372.5" y="248">2</text>
 <circle class="full" cx="486" cy="250" r="6.5"/>
 <circle class="full" cx="610" cy="250" r="6.5"/>
-<circle class="part-ring" cx="734" cy="250" r="5.75"/><path class="part" d="M734 243.5A6.5 6.5 0 0 0 734 256.5Z"/>
+<circle class="full" cx="734" cy="250" r="6.5"/>
 <text class="note" x="744.5" y="248">9</text>
 <text class="feat" x="16" y="290.5">Turn outcome</text>
 <circle class="full" cx="238" cy="286" r="6.5"/>
@@ -92,21 +92,21 @@
 <text class="note" x="372.5" y="284">3</text>
 <circle class="full" cx="486" cy="286" r="6.5"/>
 <circle class="full" cx="610" cy="286" r="6.5"/>
-<circle class="part-ring" cx="734" cy="286" r="5.75"/><path class="part" d="M734 279.5A6.5 6.5 0 0 0 734 292.5Z"/>
+<circle class="full" cx="734" cy="286" r="6.5"/>
 <text class="note" x="744.5" y="284">9</text>
 <text class="feat" x="16" y="326.5">Subagents</text>
 <circle class="full" cx="238" cy="322" r="6.5"/>
 <circle class="full" cx="362" cy="322" r="6.5"/>
 <circle class="full" cx="486" cy="322" r="6.5"/>
 <circle class="full" cx="610" cy="322" r="6.5"/>
-<circle class="none" cx="734" cy="322" r="5.75"/>
+<circle class="full" cx="734" cy="322" r="6.5"/>
 <text class="note" x="744.5" y="320">9</text>
 <text class="feat" x="16" y="362.5">Transcript</text>
 <circle class="full" cx="238" cy="358" r="6.5"/>
 <circle class="full" cx="362" cy="358" r="6.5"/>
 <circle class="full" cx="486" cy="358" r="6.5"/>
 <circle class="full" cx="610" cy="358" r="6.5"/>
-<circle class="part-ring" cx="734" cy="358" r="5.75"/><path class="part" d="M734 351.5A6.5 6.5 0 0 0 734 364.5Z"/>
+<circle class="full" cx="734" cy="358" r="6.5"/>
 <text class="note" x="744.5" y="356">9</text>
 <text class="feat" x="16" y="398.5">History</text>
 <circle class="full" cx="238" cy="394" r="6.5"/>
@@ -123,7 +123,7 @@
 <circle class="full" cx="486" cy="430" r="6.5"/>
 <circle class="part-ring" cx="610" cy="430" r="5.75"/><path class="part" d="M610 423.5A6.5 6.5 0 0 0 610 436.5Z"/>
 <text class="note" x="620.5" y="428">8</text>
-<circle class="part-ring" cx="734" cy="430" r="5.75"/><path class="part" d="M734 423.5A6.5 6.5 0 0 0 734 436.5Z"/>
+<circle class="full" cx="734" cy="430" r="6.5"/>
 <text class="note" x="744.5" y="428">9</text>
 <circle class="full" cx="22.5" cy="472" r="6.5"/>
 <text class="legend" x="36" y="476">Full</text>

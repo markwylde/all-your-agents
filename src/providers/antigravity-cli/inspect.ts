@@ -1,26 +1,25 @@
 import { watchFile } from '../../helpers/watch-file.ts';
 import type { InspectContext } from '../../provider.ts';
 import type { SessionEvent } from '../../types.ts';
-import { databaseOf, ID, steps, summaries, terminal } from './data.ts';
-import { decodeStep } from './steps.ts';
-
-export function freshEvents(events: SessionEvent[], tools: Set<string>): SessionEvent[] {
-	return events.filter((event) => {
-		if (event.kind !== 'tool') return true;
-		if (tools.has(event.id)) return false;
-		tools.add(event.id);
-		return true;
-	});
-}
+import { ID, summaries } from './data.ts';
+import { storagePath } from './storage.ts';
+import { readStream, streamState } from './stream.ts';
+import { subagents } from './subagents.ts';
 
 export async function* inspect(
 	ctx: InspectContext,
 	home: string,
 	id: string,
 ): AsyncGenerator<SessionEvent> {
-	if (!ID.test(id) || !ctx.sqlite || ctx.subagentId || ctx.signal?.aborted) return;
+	if (!ID.test(id) || !ctx.sqlite || ctx.signal?.aborted) return;
 	if (!(await summaries(ctx, home, id)).length) return;
-	const path = databaseOf(home, id);
+	if (
+		ctx.subagentId &&
+		!(await subagents(ctx, home, id)).some((child) => child.id === ctx.subagentId)
+	)
+		return;
+	const path = await storagePath(ctx, home, ctx.subagentId ?? id);
+	if (!path) return;
 	const inode = (await ctx.fs.stat(path))?.ino;
 	let dirty = true,
 		wake: (() => void) | undefined;
@@ -33,21 +32,17 @@ export async function* inspect(
 		? [path, `${path}-wal`].map((p) => watchFile(ctx.fs, p, notify, { heldOpen: true }))
 		: [];
 	ctx.signal?.addEventListener('abort', notify, { once: true });
-	const tools = new Set<string>();
-	let cursor = -1;
+	let state = streamState();
 	try {
 		do {
 			if (ctx.signal?.aborted) return;
 			dirty = false;
 			const stat = await ctx.fs.stat(path);
 			if (!stat || (inode != null && stat.ino != null && inode !== stat.ino)) return;
-			for await (const row of steps(ctx, path, cursor)) {
-				if (ctx.signal?.aborted) return;
-				if (!terminal(row.status)) break;
-				cursor = Number(row.idx);
-				const decoded = decodeStep(row);
-				if (decoded) yield* freshEvents(decoded.events, tools);
-			}
+			const result = await readStream(ctx, path, state);
+			if (ctx.signal?.aborted) return;
+			state = result.state;
+			yield* result.events;
 			if (!ctx.follow) return;
 			if (!dirty && !ctx.signal?.aborted)
 				await new Promise<void>((resolve) => {

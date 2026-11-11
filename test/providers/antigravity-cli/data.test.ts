@@ -67,7 +67,10 @@ test('tool calls, results, model names and cancellation use explicit fields', ()
 		decodeStep(tool)?.events.map((e) => e.kind),
 		['tool', 'tool-result'],
 	);
-	assert.equal(decodeStep(row(2, 132, 141, proto(), 6))?.events.at(-1)?.kind, 'turn-end');
+	assert.equal(
+		decodeStep(row(2, 132, 140, proto(), 6))?.events.some((e) => e.kind === 'turn-end'),
+		false,
+	);
 });
 
 test('malformed, oversized, mismatched and unsupported payloads fail closed', () => {

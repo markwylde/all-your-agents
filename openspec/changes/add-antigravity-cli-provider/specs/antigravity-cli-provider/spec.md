@@ -14,7 +14,7 @@ The package SHALL export `antigravityCli({ home? })`, id `antigravity-cli`, harn
 - **THEN** it reads only that home, or yields nothing respectively
 
 ### Requirement: Validated live root conversations
-Only a valid UUID SQLite conversation with no parent and a currently held matching presence lock SHALL be live. The holder MUST be alive. A stale lock SHALL NOT prove liveness. Process exit, lock deletion, loss of ownership on reconcile and conversation deletion SHALL close the binding. Existing conversations SHALL open; newly discovered conversations SHALL create. Rebinding SHALL reset per-binding state.
+Only a valid UUID conversation with no parent and a currently held matching presence lock SHALL be live. The holder MUST be alive. A stale lock SHALL NOT prove liveness. Process exit, lock deletion, loss of ownership on reconcile and conversation deletion SHALL close the binding. Existing conversations SHALL open; newly discovered conversations SHALL create. Rebinding SHALL reset per-binding state.
 
 #### Scenario: Catch-up and stale locks
 - **WHEN** two existing roots have locks but only one lock has a live holder
@@ -29,7 +29,7 @@ Only a valid UUID SQLite conversation with no parent and a currently held matchi
 - **THEN** no root session is emitted and no path outside the home is read
 
 ### Requirement: Summary history and metadata
-History SHALL list valid root summary rows backed by SQLite conversations, with title, local file workspace cwd and updatedAt when available. It SHALL honor id and since filters. Child rows and legacy protobuf-only conversations SHALL be omitted. Unknown optional fields SHALL remain unset.
+History SHALL list valid root summary rows backed by SQLite or generated legacy transcripts, with title, local file workspace cwd and updatedAt when available. It SHALL honor id and since filters. Child rows SHALL be exposed as subagents; bounded generated legacy transcript logs SHALL also be supported when available. Unknown optional fields SHALL remain unset.
 
 #### Scenario: Filtered history
 - **WHEN** history is requested with an id and since boundary
@@ -52,3 +52,14 @@ Observation SHALL use shared directory and file watches, including held database
 #### Scenario: WAL update and abort
 - **WHEN** a live step completes through a WAL write and a transcript follower is later aborted while idle
 - **THEN** the completion is observed once and all follower watches close
+
+### Requirement: Full persisted lifecycle
+The provider SHALL expose human model names from generation metadata, structured waiting reasons, tool starts before completion, executor failures and nested/background subagents. Pending background tools SHALL NOT block later events. Child transcripts SHALL be accessible only through a validated root relationship.
+
+#### Scenario: Approval followed by background completion
+- **WHEN** a tool waits for approval, begins running in the background and finishes after later steps
+- **THEN** waitingFor identifies approval, the tool starts once, later steps are visible and the result appears once
+
+#### Scenario: Nested child
+- **WHEN** a root has a child with its own child and persisted terminal outcomes
+- **THEN** subagents retain root and parent identities, background flags, terminal statuses and accessible transcripts
