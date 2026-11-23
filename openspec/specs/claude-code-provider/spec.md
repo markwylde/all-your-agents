@@ -56,9 +56,9 @@ The provider SHALL accept a session file only when all of these hold:
 - `pid` equals the filename's pid
 - `sessionId` is a UUID
 - the process with that pid exists
-- `startedAt` is within 5 seconds of that process's start time
+- `startedAt` is no more than 5 seconds before that process's start time
 
-If the start time cannot be determined but the process exists, the file SHALL be accepted.
+`startedAt` is stamped after the harness boots, so it MAY be any amount later than the process start time. If the start time cannot be determined but the process exists, the file SHALL be accepted.
 
 #### Scenario: Recycled pid
 - **WHEN** a session file left by a crashed process names a pid now used by a process that started hours later
@@ -69,12 +69,16 @@ If the start time cannot be determined but the process exists, the file SHALL be
 - **THEN** it is rejected
 
 #### Scenario: Within tolerance
-- **WHEN** `startedAt` is 4 seconds from the process start time
+- **WHEN** `startedAt` is 4 seconds before the process start time
 - **THEN** it is accepted
 
 #### Scenario: Outside tolerance
-- **WHEN** `startedAt` is 6 seconds from the process start time
+- **WHEN** `startedAt` is 6 seconds before the process start time
 - **THEN** it is rejected
+
+#### Scenario: Slow boot
+- **WHEN** `startedAt` is 10 seconds after the process start time
+- **THEN** it is accepted
 
 ### Requirement: Create vs open
 When an accepted session file appears, the provider SHALL emit `session:open` if a journal for that `sessionId` already exists. Otherwise it SHALL emit `session:create`. The decision SHALL NOT be revised later.

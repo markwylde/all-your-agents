@@ -30,11 +30,27 @@ test('accepts matching pid and start time within 4s', () => {
 	assert.equal(parsed?.sessionId, id);
 });
 
-test('rejects 6s start-time mismatch', () => {
+test('accepts a stamp 4s before the process start', () => {
+	const parsed = parseSessionFile(123, file({ startedAt: start - 4000 }), {
+		alive: true,
+		startTime: start,
+	});
+	assert.equal(parsed?.sessionId, id);
+});
+
+test('rejects a stamp 6s before the process start', () => {
 	assert.equal(
-		parseSessionFile(123, file({ startedAt: start + 6000 }), { alive: true, startTime: start }),
+		parseSessionFile(123, file({ startedAt: start - 6000 }), { alive: true, startTime: start }),
 		undefined,
 	);
+});
+
+test('accepts a slow boot that stamps startedAt 10s after the process start', () => {
+	const parsed = parseSessionFile(123, file({ startedAt: start + 10_000 }), {
+		alive: true,
+		startTime: start,
+	});
+	assert.equal(parsed?.sessionId, id);
 });
 
 test('recycled pid hours later is rejected', () => {

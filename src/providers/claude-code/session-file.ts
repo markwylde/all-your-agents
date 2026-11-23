@@ -69,7 +69,10 @@ export function parseSessionFile(
 	if (typeof sessionId !== 'string' || !UUID.test(sessionId)) return undefined;
 	if (!info.alive) return undefined;
 	if (typeof picked.startedAt === 'number' && info.startTime != null) {
-		if (Math.abs(picked.startedAt - info.startTime) > START_TIME_TOLERANCE_MS) return undefined;
+		// Claude stamps startedAt once it has booted, so a slow start puts it well
+		// after the process start. Only a stamp from before this process began can
+		// belong to an earlier owner of a recycled pid.
+		if (picked.startedAt < info.startTime - START_TIME_TOLERANCE_MS) return undefined;
 	}
 	const kind = mapKind(picked.kind, picked.entrypoint);
 	const out: ParsedSessionFile = { pid, sessionId };
