@@ -1,3 +1,7 @@
+export {
+	type AntigravityHolder,
+	createAntigravityFixtureDriver,
+} from './antigravity-driver.ts';
 export { createClaudeFixtureDriver } from './claude-driver.ts';
 export { createCodexFixtureDriver } from './codex-driver.ts';
 export type { FixtureDriver } from './driver.ts';
