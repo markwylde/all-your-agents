@@ -199,7 +199,19 @@ const { provider, driver } = createMemoryHarness();
 defineConformanceTests({ name: 'memory', provider, driver });
 ```
 
-`createClaudeFixtureDriver(home)`, `createGrokFixtureDriver(home)`, `createCodexFixtureDriver(home)` and `createOmpFixtureDriver(home)` drive the same kit against those providers. A driver's optional `startBackgroundWait` / `endBackgroundWait` steps turn on the background-wait case; leave them out for a harness that records no such work.
+`createClaudeFixtureDriver(home)`, `createGrokFixtureDriver(home)`, `createCodexFixtureDriver(home)`, `createOmpFixtureDriver(home)` and `createAntigravityFixtureDriver(home)` drive the same kit against those providers. A driver's optional `startBackgroundWait` / `endBackgroundWait` steps turn on the background-wait case; leave them out for a harness that records no such work.
+
+`createAntigravityFixtureDriver(home, { settleMs })` writes agy's SQLite summaries, conversation steps and presence locks, and needs Node's built-in `node:sqlite`. The provider binds a conversation to the one live process holding its `presence/<uuid>.lock`, so pass `driver.processes` to report each `createLiveSession` pid as that holder. Against the real process probe, as an app's end-to-end tests run it, the pid must hold the lock open:
+
+```ts
+import { createAntigravityFixtureDriver } from '@markwylde/all-your-agents/testing';
+
+const agy = createAntigravityFixtureDriver(join(home, '.gemini', 'antigravity-cli'));
+const holder = await agy.spawnHolder(id); // or open `await agy.prepareLock(id)` from your own process
+await agy.createLiveSession({ id, pid: holder.pid, cwd: '/path/to/project', title: 'Fix the build', status: 'busy' });
+await holder.stop(); // the session closes and stays listed as history
+// createLiveSession again with a new holder's pid resumes it; agy.dispose() stops any holders left.
+```
 
 ## Non-goals
 

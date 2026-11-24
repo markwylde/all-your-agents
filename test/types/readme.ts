@@ -1,5 +1,6 @@
 import type { Session, SessionActivity, SessionEvent, Subagent, Turn } from '../../src/index.js';
 import AllYourAgents, {
+	antigravityCli,
 	builtInProviders,
 	claudeCode,
 	codexCli,
@@ -7,6 +8,7 @@ import AllYourAgents, {
 	ohMyPi,
 } from '../../src/index.js';
 import {
+	createAntigravityFixtureDriver,
 	createCodexFixtureDriver,
 	createGrokFixtureDriver,
 	createMemoryHarness,
@@ -58,6 +60,20 @@ defineConformanceTests({
 	name: 'oh-my-pi',
 	provider: ohMyPi({ home: '/tmp/omp' }),
 	driver: createOmpFixtureDriver('/tmp/omp'),
+});
+const agy = createAntigravityFixtureDriver('/tmp/agy', { settleMs: 80 });
+defineConformanceTests({
+	name: 'antigravity-cli',
+	provider: antigravityCli({ home: '/tmp/agy' }),
+	driver: agy,
+	processes: agy.processes,
+});
+void (async () => {
+	const holder = await agy.spawnHolder('id');
+	await agy.createLiveSession({ id: 'id', pid: holder.pid, cwd: '/tmp/app', title: 't' });
+	void (await agy.prepareLock('id'));
+	await holder.stop();
+	await agy.dispose();
 });
 void AllYourAgents({ providers: [claudeCode()] });
 

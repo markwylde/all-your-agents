@@ -19,7 +19,7 @@ test('npm pack installs and imports both entry points', async (t) => {
 		execFileSync('npm', ['init', '-y'], { cwd: dir, stdio: 'pipe' });
 		execFileSync('npm', ['install', join(dir, tgz)], { cwd: dir, stdio: 'pipe' });
 		const src = `import aya, { builtInProviders, grokBuild, codexCli, ohMyPi, antigravityCli } from '@markwylde/all-your-agents';
-import { createGrokFixtureDriver, createCodexFixtureDriver, createOmpFixtureDriver, defineConformanceTests } from '@markwylde/all-your-agents/testing';
+import { createGrokFixtureDriver, createCodexFixtureDriver, createOmpFixtureDriver, createAntigravityFixtureDriver, defineConformanceTests } from '@markwylde/all-your-agents/testing';
 if (builtInProviders.length !== 5) throw new Error('providers');
 if (!builtInProviders.some((p) => p.id === 'grok-build')) throw new Error('grok');
 if (!builtInProviders.some((p) => p.id === 'codex-cli')) throw new Error('codex');
@@ -28,6 +28,7 @@ if (typeof codexCli !== 'function' || typeof createCodexFixtureDriver !== 'funct
 if (!builtInProviders.some((p) => p.id === 'oh-my-pi')) throw new Error('omp');
 if (typeof ohMyPi !== 'function' || typeof createOmpFixtureDriver !== 'function') throw new Error('omp exports');
 if (typeof antigravityCli !== 'function' || !builtInProviders.some(p => p.id === 'antigravity-cli')) throw new Error('agy exports');
+if (typeof createAntigravityFixtureDriver !== 'function') throw new Error('agy driver export');
 if (typeof aya !== 'function') throw new Error('default');
 if (typeof defineConformanceTests !== 'function') throw new Error('testing');
 `;
